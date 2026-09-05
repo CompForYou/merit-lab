@@ -1,0 +1,8 @@
+@import "tailwindcss";
+
+/* Tabular numerals: every digit occupies the same width, so live-updating
+   figures do not jitter horizontally. Required by the spec, section 9. */
+html {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
