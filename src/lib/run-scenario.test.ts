@@ -213,26 +213,80 @@ describe('fitToBudgetFactor', () => {
     expect(fitToBudgetFactor(null, 0.0325)).toBeNull()
   })
 
-  it('moves the spend most of the way to target in one application', () => {
-    // Approximate, not exact: capping at the range maximum is not linear in the
-    // matrix percentage, so scaling lands near the target rather than on it.
+  const fitOnce = (settings: ScenarioSettings) => {
     const before = runScenario(
-      SAMPLE_POPULATION, SAMPLE_GRADES, DEFAULT_MERIT_MATRIX, DEFAULT_SETTINGS,
+      SAMPLE_POPULATION, SAMPLE_GRADES, DEFAULT_MERIT_MATRIX, settings,
     ).budget
     const factor = fitToBudgetFactor(
       before.budgetSpendPercent,
-      DEFAULT_SETTINGS.targetBudgetPercent,
+      settings.targetBudgetPercent,
     )!
     const after = runScenario(
       SAMPLE_POPULATION,
       SAMPLE_GRADES,
       scaleMatrix(DEFAULT_MERIT_MATRIX, factor),
-      DEFAULT_SETTINGS,
+      settings,
     ).budget
+    return { before, after, factor }
+  }
 
-    const gapBefore = Math.abs(before.budgetSpendPercent! - 0.0325)
-    const gapAfter = Math.abs(after.budgetSpendPercent! - 0.0325)
-    expect(gapAfter).toBeLessThan(gapBefore)
-    expect(gapAfter).toBeLessThan(0.0005)
+  it('lands exactly on target when no increase is capped', () => {
+    // With nothing withheld at the maximum, cost is perfectly linear in the
+    // matrix percentage and one pass is exact to floating-point precision.
+    for (const overMaxMode of ['allowOverMax', 'lumpSum'] as const) {
+      const { after } = fitOnce({ ...DEFAULT_SETTINGS, overMaxMode })
+      expect(after.budgetSpendPercent!).toBeCloseTo(0.0325, 12)
+      expect(after.reducedByCap).toBe(0)
+    }
+  })
+
+  it('lands within a hundredth of a basis point under capAtMax', () => {
+    // Not literally exact here: shrinking the matrix moves a couple of employees
+    // off their cap, and their increases resume scaling. The residual is around
+    // 0.002 basis points, which is tens of dollars on a payroll of millions.
+    const { after } = fitOnce({ ...DEFAULT_SETTINGS, overMaxMode: 'capAtMax' })
+    expect(after.budgetSpendPercent!).toBeCloseTo(0.0325, 6)
+    expect(Math.abs(after.budgetSpendPercent! - 0.0325)).toBeLessThan(0.000001)
+  })
+
+  it('lands exactly on a lower target', () => {
+    const { after } = fitOnce({ ...DEFAULT_SETTINGS, targetBudgetPercent: 0.01 })
+    expect(after.budgetSpendPercent!).toBeCloseTo(0.01, 5)
+  })
+
+  it('scales every cell by the same factor, preserving the plan shape', () => {
+    const { factor } = fitOnce(DEFAULT_SETTINGS)
+    const scaled = scaleMatrix(DEFAULT_MERIT_MATRIX, factor)
+    for (const rating of DEFAULT_MERIT_MATRIX.ratings) {
+      for (const band of DEFAULT_MERIT_MATRIX.bands) {
+        const before = DEFAULT_MERIT_MATRIX.cells[rating][band.id]
+        if (before === 0) continue
+        expect(scaled.cells[rating][band.id] / before).toBeCloseTo(factor, 10)
+      }
+    }
+  })
+
+  it('falls short of a target the range maximum will not permit', () => {
+    // At a 10% target the matrix nearly triples, so a large part of the
+    // population hits its range maximum and stops absorbing increase. Under
+    // capAtMax the plan physically cannot spend 10%, and re-applying the factor
+    // will not change that. The shortfall is a real limit, not a rounding error.
+    const { after } = fitOnce({ ...DEFAULT_SETTINGS, targetBudgetPercent: 0.1 })
+    expect(after.budgetSpendPercent!).toBeLessThan(0.1)
+    expect(after.budgetSpendPercent!).toBeGreaterThan(0.095)
+    expect(after.reducedByCap).toBeGreaterThan(0)
+  })
+
+  it('reaches the same target when nothing is capped', () => {
+    // The identical 10% target under allowOverMax, where no increase is
+    // withheld, lands exactly. This is what proves the shortfall above is the
+    // cap and not the arithmetic.
+    const { after } = fitOnce({
+      ...DEFAULT_SETTINGS,
+      targetBudgetPercent: 0.1,
+      overMaxMode: 'allowOverMax',
+    })
+    expect(after.budgetSpendPercent!).toBeCloseTo(0.1, 6)
+    expect(after.reducedByCap).toBe(0)
   })
 })

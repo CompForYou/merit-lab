@@ -76,3 +76,13 @@ export {
   type ScenarioResults,
 } from './run-scenario'
 export { layoutDots, DEFAULT_BIN_WIDTH, type Dot, type DotLayout } from './dot-layout'
+export {
+  serializeScenario,
+  parseScenarioFile,
+  scenarioFileName,
+  SCENARIO_FILE_VERSION,
+  type ScenarioFile,
+  type ScenarioParseResult,
+} from './scenario-file'
+export { resultsToCsv } from './export-csv'
+export { downloadText, readFileAsText } from './download'

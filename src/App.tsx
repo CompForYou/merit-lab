@@ -1,14 +1,11 @@
-import { useMemo, useRef, useState } from 'react'
-import { Panel, Stat } from './components/Panel'
-import { IssueList } from './components/IssueList'
-import { GradeTable } from './components/GradeTable'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Panel } from './components/Panel'
 import { PasteArea, ActionButton } from './components/PasteArea'
 import { MeritMatrixGrid } from './components/MeritMatrixGrid'
 import { SettingsPanel } from './components/SettingsPanel'
-import { CostPanel } from './components/CostPanel'
-import { DotPlot } from './components/DotPlot'
-import { OutOfRangeList, DistributionShift } from './components/OutOfRangeList'
-import { CompressionTable, CappedNote } from './components/CompressionTable'
+import { ScenarioBar } from './components/ScenarioBar'
+import { ConsequencesColumn } from './components/ConsequencesColumn'
+import { IssueList } from './components/IssueList'
 import { importEmployeesFromCsv } from './lib/import-employees'
 import { importGradesFromCsv } from './lib/import-grades'
 import { profilePopulation } from './lib/population-profile'
@@ -22,16 +19,23 @@ import {
   scaleMatrix,
 } from './lib/matrix-edit'
 import {
-  formatCompaRatio,
-  formatCount,
-  formatPercent,
-  pluralize,
-} from './lib/format'
+  serializeScenario,
+  parseScenarioFile,
+  scenarioFileName,
+} from './lib/scenario-file'
+import { resultsToCsv } from './lib/export-csv'
+import { downloadText, readFileAsText } from './lib/download'
+import { formatCount, formatCurrencyCompact, pluralize } from './lib/format'
 import { SAMPLE_POPULATION } from './data/sample-population'
 import { SAMPLE_GRADES } from './data/sample-structure'
 import { DEFAULT_MERIT_MATRIX, DEFAULT_SETTINGS } from './data/default-matrix'
 import type { ImportIssue } from './lib/import-employees'
-import type { MeritMatrix, ScenarioSettings } from './types/domain'
+import type {
+  Employee,
+  Grade,
+  MeritMatrix,
+  ScenarioSettings,
+} from './types/domain'
 
 const POPULATION_PLACEHOLDER = `employee_id,grade,base_salary,performance_rating,fte,eligible,hire_date
 E001,G3,74500,Meets,1,Y,2019-04-01
@@ -44,19 +48,61 @@ G2,Senior Analyst,2,56500,67000,77500`
 /** Long enough to see which cells moved, short enough not to be a wait. */
 const FIT_ANIMATION_MS = 400
 
+/** One plan design. The population is shared; only these differ between A and B. */
+interface Plan {
+  name: string
+  matrix: MeritMatrix
+  settings: ScenarioSettings
+}
+
+const newPlan = (name: string): Plan => ({
+  name,
+  matrix: DEFAULT_MERIT_MATRIX,
+  settings: DEFAULT_SETTINGS,
+})
+
 export default function App() {
   const [populationText, setPopulationText] = useState('')
   const [structureText, setStructureText] = useState('')
-  const [sampleLoaded, setSampleLoaded] = useState(false)
-  const [matrix, setMatrix] = useState<MeritMatrix>(DEFAULT_MERIT_MATRIX)
-  const [settings, setSettings] = useState<ScenarioSettings>(DEFAULT_SETTINGS)
+  const [loaded, setLoaded] = useState<{
+    employees: Employee[]
+    grades: Grade[]
+  } | null>(null)
+
+  const [plans, setPlans] = useState<[Plan, Plan]>([
+    newPlan('Plan A'),
+    newPlan('Plan B'),
+  ])
+  const [activePlan, setActivePlan] = useState<0 | 1>(0)
   const [newRating, setNewRating] = useState('')
   const [hoveredCell, setHoveredCell] = useState<{
     rating: string
     bandId: string
   } | null>(null)
+  const [fileNotes, setFileNotes] = useState<ImportIssue[]>([])
+
   const animationRef = useRef<number | null>(null)
   const settleRef = useRef<number | null>(null)
+
+  const matrix = plans[activePlan].matrix
+  const settings = plans[activePlan].settings
+
+  const updateActivePlan = useCallback(
+    (change: (plan: Plan) => Plan) => {
+      setPlans((current) => {
+        const next: [Plan, Plan] = [current[0], current[1]]
+        next[activePlan] = change(current[activePlan])
+        return next
+      })
+    },
+    [activePlan],
+  )
+
+  const setMatrix = useCallback(
+    (change: (current: MeritMatrix) => MeritMatrix) =>
+      updateActivePlan((plan) => ({ ...plan, matrix: change(plan.matrix) })),
+    [updateActivePlan],
+  )
 
   // Everything below recomputes on every keystroke. There is no server, so
   // there is nothing that could be loading and no reason to make anyone wait.
@@ -68,9 +114,7 @@ export default function App() {
   const grades =
     structureImport && structureImport.grades.length > 0
       ? structureImport.grades
-      : sampleLoaded
-        ? SAMPLE_GRADES
-        : []
+      : (loaded?.grades ?? [])
 
   const populationImport = useMemo(
     () =>
@@ -82,8 +126,7 @@ export default function App() {
     [populationText, grades],
   )
 
-  const employees =
-    populationImport?.employees ?? (sampleLoaded ? SAMPLE_POPULATION : [])
+  const employees = populationImport?.employees ?? loaded?.employees ?? []
 
   const profile = useMemo(
     () => profilePopulation(employees, grades),
@@ -95,40 +138,86 @@ export default function App() {
     [employees, grades, matrix, settings],
   )
 
+  // The other plan is costed too, so the comparison is always live rather than
+  // computed only at the moment of swapping.
+  const otherIndex: 0 | 1 = activePlan === 0 ? 1 : 0
+  const otherScenario = useMemo(
+    () =>
+      runScenario(
+        employees,
+        grades,
+        plans[otherIndex].matrix,
+        plans[otherIndex].settings,
+      ),
+    [employees, grades, plans, otherIndex],
+  )
+
+  const dotLayout = useMemo(() => layoutDots(scenario.results), [scenario.results])
+
   const errors: ImportIssue[] = [
     ...(structureImport?.errors ?? []),
     ...(populationImport?.errors ?? []),
+    ...fileNotes.filter((n) => n.column === 'error'),
   ]
   const warnings: ImportIssue[] = [
     ...(structureImport?.warnings ?? []),
     ...(populationImport?.warnings ?? []),
+    ...fileNotes.filter((n) => n.column !== 'error'),
   ]
 
   const hasData = employees.length > 0 && grades.length > 0
   const noMatrixCell = scenario.results.filter(
     (r) => r.exclusionReason === 'no-matrix-cell',
   )
-  const cappedCount = scenario.results.filter((r) => r.reducedByCap > 0).length
-
-  const dotLayout = useMemo(() => layoutDots(scenario.results), [scenario.results])
-  const overMaximum = scenario.results.filter((r) => r.isOverMaximumAfter)
-  const belowMinimum = scenario.results.filter((r) => r.isBelowMinimumAfter)
 
   const fitFactor = fitToBudgetFactor(
     scenario.budget.budgetSpendPercent,
     settings.targetBudgetPercent,
   )
 
+  /**
+   * Under-target while the maximum is withholding money means fit-to-budget has
+   * nothing left to give: those employees cannot absorb a larger percentage, so
+   * scaling the matrix higher stops raising spend.
+   */
+  const capIsLimiting =
+    hasData &&
+    scenario.budget.reducedByCap > 0 &&
+    scenario.budget.budgetSpendPercent !== null &&
+    scenario.budget.budgetSpendPercent < settings.targetBudgetPercent - 0.0001
+
+  /** Backtick swaps plans, except while the user is typing into a field. */
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== '`' || event.metaKey || event.ctrlKey || event.altKey) return
+      const target = event.target as HTMLElement | null
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable)
+      ) {
+        return
+      }
+      event.preventDefault()
+      setActivePlan((current) => (current === 0 ? 1 : 0))
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
+
   const loadSample = () => {
-    setSampleLoaded(true)
+    setLoaded({ employees: SAMPLE_POPULATION, grades: SAMPLE_GRADES })
     setPopulationText('')
     setStructureText('')
+    setFileNotes([])
   }
 
   const clearAll = () => {
-    setSampleLoaded(false)
+    setLoaded(null)
     setPopulationText('')
     setStructureText('')
+    setFileNotes([])
   }
 
   const commitNewRating = () => {
@@ -148,15 +237,9 @@ export default function App() {
   /**
    * Scale the whole matrix onto the target budget.
    *
-   * Animated rather than snapped, so the user can see which cells moved and by
-   * how much. Scaling preserves the shape of the plan design and changes only
-   * its magnitude, which is what a practitioner means by landing on a number.
-   *
    * The animation is decoration; the result is not. Animation frames stop
    * arriving whenever the page is not painting — a background tab, a minimised
-   * window — so a timer applies the final matrix regardless. Without it,
-   * clicking the button in a tab that happens not to be drawing does nothing at
-   * all, which is a far worse failure than a missing animation.
+   * window — so a timer applies the final matrix regardless.
    */
   const fitToBudget = () => {
     if (fitFactor === null) return
@@ -168,7 +251,7 @@ export default function App() {
     const prefersReducedMotion =
       window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
     if (prefersReducedMotion) {
-      setMatrix(settled)
+      setMatrix(() => settled)
       return
     }
 
@@ -176,15 +259,67 @@ export default function App() {
     const step = (now: number) => {
       const progress = Math.min((now - startedAt) / FIT_ANIMATION_MS, 1)
       const eased = 1 - Math.pow(1 - progress, 3)
-      setMatrix(scaleMatrix(start, 1 + (fitFactor - 1) * eased))
+      setMatrix(() => scaleMatrix(start, 1 + (fitFactor - 1) * eased))
       animationRef.current = progress < 1 ? requestAnimationFrame(step) : null
     }
     animationRef.current = requestAnimationFrame(step)
 
     settleRef.current = window.setTimeout(() => {
       cancelPendingFit()
-      setMatrix(settled)
+      setMatrix(() => settled)
     }, FIT_ANIMATION_MS + 50)
+  }
+
+  const exportScenario = () => {
+    const json = serializeScenario({
+      name: plans[activePlan].name,
+      employees,
+      grades,
+      matrix,
+      settings,
+    })
+    downloadText(scenarioFileName(plans[activePlan].name), json, 'application/json')
+  }
+
+  const exportCsv = () => {
+    const csv = resultsToCsv(scenario.results, employees, grades)
+    const stamp = new Date().toISOString().slice(0, 10)
+    downloadText(`merit-lab-results-${stamp}.csv`, csv, 'text/csv')
+  }
+
+  const importScenario = async (file: File) => {
+    let text: string
+    try {
+      text = await readFileAsText(file)
+    } catch {
+      setFileNotes([
+        { row: null, column: 'error', message: `Could not read ${file.name}.` },
+      ])
+      return
+    }
+
+    const parsed = parseScenarioFile(text)
+    if (!parsed.scenario) {
+      setFileNotes(
+        parsed.errors.map((message) => ({ row: null, column: 'error', message })),
+      )
+      return
+    }
+
+    setLoaded({
+      employees: parsed.scenario.employees,
+      grades: parsed.scenario.grades,
+    })
+    setPopulationText('')
+    setStructureText('')
+    updateActivePlan(() => ({
+      name: parsed.scenario!.name,
+      matrix: parsed.scenario!.matrix,
+      settings: parsed.scenario!.settings,
+    }))
+    setFileNotes(
+      parsed.warnings.map((message) => ({ row: null, column: null, message })),
+    )
   }
 
   return (
@@ -202,6 +337,52 @@ export default function App() {
       <main className="mx-auto grid max-w-[100rem] grid-cols-1 gap-10 px-6 py-8 xl:grid-cols-[minmax(0,40rem)_minmax(0,1fr)]">
         {/* Controls */}
         <div>
+          <Panel title="Scenarios">
+            <ScenarioBar
+              slots={[
+                {
+                  name: plans[0].name,
+                  budget: hasData
+                    ? activePlan === 0
+                      ? scenario.budget
+                      : otherScenario.budget
+                    : null,
+                },
+                {
+                  name: plans[1].name,
+                  budget: hasData
+                    ? activePlan === 1
+                      ? scenario.budget
+                      : otherScenario.budget
+                    : null,
+                },
+              ]}
+              activeIndex={activePlan}
+              onSelect={setActivePlan}
+              onRename={(index, name) =>
+                setPlans((current) => {
+                  const next: [Plan, Plan] = [current[0], current[1]]
+                  next[index] = { ...current[index], name }
+                  return next
+                })
+              }
+              onCopyToOther={() =>
+                setPlans((current) => {
+                  const next: [Plan, Plan] = [current[0], current[1]]
+                  next[otherIndex] = {
+                    ...current[activePlan],
+                    name: current[otherIndex].name,
+                  }
+                  return next
+                })
+              }
+              onExportScenario={exportScenario}
+              onExportCsv={exportCsv}
+              onImportScenario={importScenario}
+              canExport={hasData}
+            />
+          </Panel>
+
           <Panel title="Merit matrix">
             <MeritMatrixGrid
               matrix={matrix}
@@ -234,7 +415,14 @@ export default function App() {
               <ActionButton onClick={commitNewRating} disabled={newRating.trim() === ''}>
                 Add
               </ActionButton>
-              <ActionButton onClick={() => setMatrix(DEFAULT_MERIT_MATRIX)}>
+              <ActionButton
+                onClick={() =>
+                  updateActivePlan((plan) => ({
+                    ...plan,
+                    matrix: DEFAULT_MERIT_MATRIX,
+                  }))
+                }
+              >
                 Reset matrix
               </ActionButton>
               <ActionButton onClick={fitToBudget} disabled={fitFactor === null}>
@@ -247,6 +435,16 @@ export default function App() {
               ) : null}
             </div>
 
+            {capIsLimiting ? (
+              <p className="mt-3 text-xs text-amber-800">
+                Spend is below target while{' '}
+                {formatCurrencyCompact(scenario.budget.reducedByCap)} is being
+                withheld at the range maximum. Scaling the matrix higher will not
+                close the gap: those employees cannot absorb more. Switch the
+                over-maximum mode, or the ranges need to move.
+              </p>
+            ) : null}
+
             {noMatrixCell.length > 0 ? (
               <p className="mt-3 text-xs text-amber-800">
                 {pluralize(noMatrixCell.length, 'employee')} carry a rating with no row
@@ -257,7 +455,12 @@ export default function App() {
           </Panel>
 
           <Panel title="Plan settings">
-            <SettingsPanel settings={settings} onChange={setSettings} />
+            <SettingsPanel
+              settings={settings}
+              onChange={(next) =>
+                updateActivePlan((plan) => ({ ...plan, settings: next }))
+              }
+            />
           </Panel>
 
           <Panel
@@ -281,13 +484,13 @@ export default function App() {
               <ActionButton onClick={loadSample}>Load sample</ActionButton>
               <ActionButton
                 onClick={clearAll}
-                disabled={!sampleLoaded && !populationText && !structureText}
+                disabled={!loaded && !populationText && !structureText}
               >
                 Clear
               </ActionButton>
             </div>
 
-            {sampleLoaded && !populationText ? (
+            {loaded && !populationText && employees === SAMPLE_POPULATION ? (
               <p className="mt-3 text-[11px] leading-relaxed text-zinc-500">
                 Showing a synthetic 204-employee population, generated by code. It
                 deliberately includes green-circled, red-circled, part-time and
@@ -333,171 +536,34 @@ export default function App() {
         {/* Consequences */}
         <div>
           {hasData ? (
-            <>
-              <Panel title="Cost">
-                <CostPanel
-                  budget={scenario.budget}
-                  overMaxMode={settings.overMaxMode}
-                  cappedCount={cappedCount}
-                />
-              </Panel>
-
-              <Panel
-                title="Compa-ratio distribution"
-                aside={
-                  hoveredCell
-                    ? `showing ${hoveredCell.rating} · ${
-                        matrix.bands.find((b) => b.id === hoveredCell.bandId)?.label ??
-                        ''
-                      }`
-                    : 'one dot per employee'
-                }
-              >
-                <DotPlot
-                  layout={dotLayout}
-                  bands={matrix.bands}
-                  hovered={hoveredCell}
-                />
-                <div className="mt-4 border-t border-zinc-100 pt-4">
-                  <DistributionShift
-                    medianBefore={scenario.distribution.medianCompaRatioBefore}
-                    medianAfter={scenario.distribution.medianCompaRatioAfter}
-                    meanBefore={scenario.distribution.meanCompaRatioBefore}
-                    meanAfter={scenario.distribution.meanCompaRatioAfter}
-                  />
-                </div>
-              </Panel>
-
-              <Panel title="By grade">
-                <GradeTable
-                  profile={profile}
-                  grades={grades}
-                  byGrade={scenario.byGrade}
-                />
-              </Panel>
-
-              <Panel
-                title="Above the maximum"
-                aside={
-                  scenario.distribution.countCrossedMaximum > 0
-                    ? `${formatCount(scenario.distribution.countCrossedMaximum)} crossed this cycle`
-                    : 'none crossed this cycle'
-                }
-              >
-                <OutOfRangeList
-                  title="finish above their range maximum"
-                  results={overMaximum}
-                  grades={grades}
-                  emptyMessage="Nobody finishes above their range maximum."
-                  tone="over"
-                />
-                <CappedNote
-                  reducedByCap={scenario.budget.reducedByCap}
-                  cappedCount={cappedCount}
-                />
-              </Panel>
-
-              <Panel title="Below the minimum" aside="green-circled">
-                <OutOfRangeList
-                  title="remain below their range minimum"
-                  results={belowMinimum}
-                  grades={grades}
-                  emptyMessage="Nobody remains below their range minimum."
-                  tone="under"
-                />
-                {belowMinimum.length > 0 ? (
-                  <p className="mt-2 text-[11px] leading-relaxed text-zinc-500">
-                    A merit matrix does not clear green-circling. Moving these
-                    employees into range needs a separate adjustment, costed outside
-                    the merit budget.
-                  </p>
-                ) : null}
-              </Panel>
-
-              <Panel title="Compression indicator" aside="adjacent grades">
-                <CompressionTable pairs={scenario.compression} />
-              </Panel>
-
-              <Panel title="Population profile" aside="before the cycle">
-                <div className="grid grid-cols-3 gap-6">
-                  <Stat
-                    label="Median compa-ratio"
-                    value={formatCompaRatio(profile.medianCompaRatio)}
-                    detail={`mean ${formatCompaRatio(profile.meanCompaRatio)}`}
-                  />
-                  <Stat
-                    label="Below minimum"
-                    value={formatCount(profile.belowMinimum)}
-                    detail={
-                      profile.headcount > 0
-                        ? formatPercent(profile.belowMinimum / profile.headcount, 1)
-                        : undefined
-                    }
-                    tone={profile.belowMinimum > 0 ? 'warn' : 'quiet'}
-                  />
-                  <Stat
-                    label="Above maximum"
-                    value={formatCount(profile.aboveMaximum)}
-                    detail={
-                      profile.headcount > 0
-                        ? formatPercent(profile.aboveMaximum / profile.headcount, 1)
-                        : undefined
-                    }
-                    tone={profile.aboveMaximum > 0 ? 'warn' : 'quiet'}
-                  />
-                </div>
-
-                {profile.unplaceable > 0 ? (
-                  <p className="mt-4 text-xs text-amber-800">
-                    {pluralize(profile.unplaceable, 'employee')} could not be placed
-                    in a range and {profile.unplaceable === 1 ? 'is' : 'are'} left out
-                    of every average. They are still counted in headcount and payroll.
-                  </p>
-                ) : null}
-              </Panel>
-
-              <Panel title="Rating distribution">
-                <RatingBars profile={profile} />
-              </Panel>
-            </>
+            <ConsequencesColumn
+              scenario={scenario}
+              profile={profile}
+              grades={grades}
+              matrix={matrix}
+              settings={settings}
+              dotLayout={dotLayout}
+              hoveredCell={hoveredCell}
+              errors={errors}
+              warnings={warnings}
+            />
           ) : (
-            <EmptyState hasGrades={grades.length > 0} hasEmployees={employees.length > 0} />
+            <>
+              <EmptyState
+                hasGrades={grades.length > 0}
+                hasEmployees={employees.length > 0}
+              />
+              {errors.length > 0 || warnings.length > 0 ? (
+                <div className="mt-8">
+                  <Panel title="Import notes">
+                    <IssueList errors={errors} warnings={warnings} />
+                  </Panel>
+                </div>
+              ) : null}
+            </>
           )}
-
-          {errors.length > 0 || warnings.length > 0 ? (
-            <Panel title="Import notes">
-              <IssueList errors={errors} warnings={warnings} />
-            </Panel>
-          ) : null}
         </div>
       </main>
-    </div>
-  )
-}
-
-function RatingBars({ profile }: { profile: ReturnType<typeof profilePopulation> }) {
-  const total = profile.headcount
-  const widest = Math.max(...profile.ratingCounts.map((r) => r.count), 1)
-
-  return (
-    <div className="space-y-1.5">
-      {profile.ratingCounts.map(({ rating, count }) => (
-        <div key={rating} className="flex items-center gap-3 text-xs">
-          <div className="w-28 shrink-0 truncate text-zinc-600">{rating}</div>
-          <div className="h-3 flex-1 bg-zinc-100">
-            <div
-              className="h-full bg-zinc-400"
-              style={{ width: `${(count / widest) * 100}%` }}
-            />
-          </div>
-          <div className="w-10 shrink-0 text-right tabular-nums text-zinc-900">
-            {formatCount(count)}
-          </div>
-          <div className="w-12 shrink-0 text-right tabular-nums text-zinc-400">
-            {formatPercent(total > 0 ? count / total : null, 0)}
-          </div>
-        </div>
-      ))}
     </div>
   )
 }
@@ -509,7 +575,8 @@ function EmptyState({
   hasGrades: boolean
   hasEmployees: boolean
 }) {
-  let message = 'Load the sample population, or paste your own data on the left.'
+  let message =
+    'Load the sample population, paste your own data, or load a saved scenario.'
   if (hasEmployees && !hasGrades) {
     message =
       'A population is loaded but there is no salary structure to place it against. Paste a structure on the left.'
