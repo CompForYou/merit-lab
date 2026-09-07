@@ -29,6 +29,24 @@ export function GradeTable({
 }) {
   const gradeById = new Map(grades.map((g) => [g.id, g]))
 
+  // Summed from the same rows the table renders, so the footer cannot disagree
+  // with the body above it.
+  const eligiblePayroll = [...byGrade.values()].reduce(
+    (sum, g) => sum + g.eligiblePayroll,
+    0,
+  )
+  const cost = [...byGrade.values()].reduce((sum, g) => sum + g.totalSpend, 0)
+  const totals = {
+    headcount: profile.byGrade.reduce((sum, g) => sum + g.headcount, 0),
+    payroll: profile.byGrade.reduce((sum, g) => sum + g.payroll, 0),
+    cost,
+    spendPercent: eligiblePayroll > 0 ? cost / eligiblePayroll : null,
+    outOfRange: profile.byGrade.reduce(
+      (sum, g) => sum + g.belowMinimum + g.aboveMaximum,
+      0,
+    ),
+  }
+
   return (
     <div className="overflow-x-auto">
       <table className="w-full border-collapse text-xs">
@@ -95,6 +113,32 @@ export function GradeTable({
             )
           })}
         </tbody>
+        <tfoot>
+          <tr className="border-t-2 border-zinc-300 tabular-nums">
+            <td className="py-1.5 pr-3 text-[11px] uppercase tracking-[0.08em] text-zinc-400">
+              All grades
+            </td>
+            <td className="px-2 py-1.5 text-right">{formatCount(totals.headcount)}</td>
+            <td className="px-2 py-1.5" />
+            <td className="px-2 py-1.5" />
+            <td className="px-2 py-1.5 text-right text-zinc-500">
+              {formatCurrencyCompact(totals.payroll)}
+            </td>
+            <td className="px-2 py-1.5 text-right font-medium text-zinc-900">
+              {formatCurrencyCompact(totals.cost)}
+            </td>
+            <td className="px-2 py-1.5 text-right text-zinc-500">
+              {formatPercent(totals.spendPercent)}
+            </td>
+            <td
+              className={`py-1.5 pl-2 text-right ${
+                totals.outOfRange > 0 ? 'text-amber-700' : 'text-zinc-300'
+              }`}
+            >
+              {totals.outOfRange > 0 ? formatCount(totals.outOfRange) : '·'}
+            </td>
+          </tr>
+        </tfoot>
       </table>
       <p className="mt-2 text-[11px] leading-relaxed text-zinc-400">
         Med CR is the median compa-ratio, on full-time equivalent salary. Payroll and

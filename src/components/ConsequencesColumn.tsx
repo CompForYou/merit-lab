@@ -1,11 +1,11 @@
-import { Panel, Stat } from './Panel'
+import { Panel } from './Panel'
 import { CostPanel } from './CostPanel'
 import { DotPlot } from './DotPlot'
 import { GradeTable } from './GradeTable'
 import { OutOfRangeList, DistributionShift } from './OutOfRangeList'
 import { CompressionTable, CappedNote } from './CompressionTable'
 import { IssueList } from './IssueList'
-import { formatCompaRatio, formatCount, formatPercent, pluralize } from '../lib/format'
+import { formatCount, pluralize } from '../lib/format'
 import type { ScenarioResults } from '../lib/run-scenario'
 import type { PopulationProfile } from '../lib/population-profile'
 import type { DotLayout } from '../lib/dot-layout'
@@ -63,6 +63,14 @@ export function ConsequencesColumn({
         }
       >
         <DotPlot layout={dotLayout} bands={matrix.bands} hovered={hoveredCell} />
+        {profile.unplaceable > 0 ? (
+          <p className="mt-2 text-xs text-amber-800">
+            {pluralize(profile.unplaceable, 'employee')} could not be placed in a
+            range, so {profile.unplaceable === 1 ? 'has' : 'have'} no dot and
+            {profile.unplaceable === 1 ? ' is' : ' are'} left out of every average.
+            They are still counted in headcount and payroll.
+          </p>
+        ) : null}
         <div className="mt-4 border-t border-zinc-100 pt-4">
           <DistributionShift
             medianBefore={scenario.distribution.medianCompaRatioBefore}
@@ -119,48 +127,6 @@ export function ConsequencesColumn({
         <CompressionTable pairs={scenario.compression} />
       </Panel>
 
-      <Panel title="Population profile" aside="before the cycle">
-        <div className="grid grid-cols-3 gap-6">
-          <Stat
-            label="Median compa-ratio"
-            value={formatCompaRatio(profile.medianCompaRatio)}
-            detail={`mean ${formatCompaRatio(profile.meanCompaRatio)}`}
-          />
-          <Stat
-            label="Below minimum"
-            value={formatCount(profile.belowMinimum)}
-            detail={
-              profile.headcount > 0
-                ? formatPercent(profile.belowMinimum / profile.headcount, 1)
-                : undefined
-            }
-            tone={profile.belowMinimum > 0 ? 'warn' : 'quiet'}
-          />
-          <Stat
-            label="Above maximum"
-            value={formatCount(profile.aboveMaximum)}
-            detail={
-              profile.headcount > 0
-                ? formatPercent(profile.aboveMaximum / profile.headcount, 1)
-                : undefined
-            }
-            tone={profile.aboveMaximum > 0 ? 'warn' : 'quiet'}
-          />
-        </div>
-
-        {profile.unplaceable > 0 ? (
-          <p className="mt-4 text-xs text-amber-800">
-            {pluralize(profile.unplaceable, 'employee')} could not be placed in a
-            range and {profile.unplaceable === 1 ? 'is' : 'are'} left out of every
-            average. They are still counted in headcount and payroll.
-          </p>
-        ) : null}
-      </Panel>
-
-      <Panel title="Rating distribution">
-        <RatingBars profile={profile} />
-      </Panel>
-
       {errors.length > 0 || warnings.length > 0 ? (
         <Panel title="Import notes">
           <IssueList errors={errors} warnings={warnings} />
@@ -170,29 +136,3 @@ export function ConsequencesColumn({
   )
 }
 
-function RatingBars({ profile }: { profile: PopulationProfile }) {
-  const total = profile.headcount
-  const widest = Math.max(...profile.ratingCounts.map((r) => r.count), 1)
-
-  return (
-    <div className="space-y-1.5">
-      {profile.ratingCounts.map(({ rating, count }) => (
-        <div key={rating} className="flex items-center gap-3 text-xs">
-          <div className="w-28 shrink-0 truncate text-zinc-600">{rating}</div>
-          <div className="h-3 flex-1 bg-zinc-100">
-            <div
-              className="h-full bg-zinc-400"
-              style={{ width: `${(count / widest) * 100}%` }}
-            />
-          </div>
-          <div className="w-10 shrink-0 text-right tabular-nums text-zinc-900">
-            {formatCount(count)}
-          </div>
-          <div className="w-12 shrink-0 text-right tabular-nums text-zinc-400">
-            {formatPercent(total > 0 ? count / total : null, 0)}
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-}

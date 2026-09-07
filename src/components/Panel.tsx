@@ -60,3 +60,47 @@ export function Stat({
     </div>
   )
 }
+
+/**
+ * A panel that folds itself away once its job is done.
+ *
+ * The paste areas are used once at the start of a session and then hold a
+ * permanent block of the control column for the rest of it. Collapsing them
+ * gives the space back to the matrix without hiding the ability to paste again.
+ */
+export function CollapsiblePanel({
+  title,
+  aside,
+  collapsed,
+  summary,
+  children,
+}: {
+  title: string
+  aside?: ReactNode
+  collapsed: boolean
+  summary: string
+  children: ReactNode
+}) {
+  if (!collapsed) {
+    return (
+      <Panel title={title} aside={aside}>
+        {children}
+      </Panel>
+    )
+  }
+
+  return (
+    <details className="mb-8 group">
+      <summary className="flex cursor-pointer list-none items-baseline justify-between gap-4 text-[11px] font-medium uppercase tracking-[0.12em] text-zinc-400 hover:text-zinc-600">
+        <span>
+          {title}
+          <span className="ml-2 normal-case tracking-normal text-zinc-300 group-open:hidden">
+            {summary}
+          </span>
+        </span>
+        {aside ? <span className="normal-case tracking-normal">{aside}</span> : null}
+      </summary>
+      <div className="mt-3">{children}</div>
+    </details>
+  )
+}
