@@ -3,6 +3,7 @@ import { Explain } from './Explain'
 import { CostPanel } from './CostPanel'
 import { DotPlot, type DotPlotMode } from './DotPlot'
 import { GroupTable } from './GroupTable'
+import { AdvisorPanel } from './AdvisorPanel'
 import { GradeTable } from './GradeTable'
 import { OutOfRangeList, DistributionShift } from './OutOfRangeList'
 import { CompressionTable, CappedNote } from './CompressionTable'
@@ -10,6 +11,7 @@ import { IssueList } from './IssueList'
 import { formatCount, pluralize } from '../lib/format'
 import type { ScenarioResults } from '../lib/run-scenario'
 import type { GroupRow } from '../lib/grouping'
+import type { Finding } from '../lib/advisor'
 import type { PopulationProfile } from '../lib/population-profile'
 import type { ImportIssue } from '../lib/import-employees'
 import type { Grade, MeritMatrix, ScenarioSettings } from '../types/domain'
@@ -37,6 +39,7 @@ export function ConsequencesColumn({
   highlightedGroupKey,
   onHighlightGroup,
   isDemographicGrouping,
+  findings,
   errors,
   warnings,
 }: {
@@ -57,6 +60,7 @@ export function ConsequencesColumn({
   highlightedGroupKey: string | null
   onHighlightGroup: (key: string | null) => void
   isDemographicGrouping: boolean
+  findings: Finding[]
   errors: ImportIssue[]
   warnings: ImportIssue[]
 }) {
@@ -66,6 +70,19 @@ export function ConsequencesColumn({
 
   return (
     <>
+      {/* The advisor leads, because it says which of the panels below deserve
+          attention first and in what order. */}
+      <Panel
+        title="What to do about this plan"
+        aside={
+          findings.length > 0
+            ? `${findings.length} ${findings.length === 1 ? 'finding' : 'findings'}`
+            : 'nothing to raise'
+        }
+      >
+        <AdvisorPanel findings={findings} />
+      </Panel>
+
       <Panel title="Cost">
         <CostPanel
           budget={scenario.budget}

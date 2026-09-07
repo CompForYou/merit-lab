@@ -97,3 +97,16 @@ export {
 export { explainDot, type DotExplanation, type DotStatus } from './dot-explain'
 export { layoutDotsByGrade, type DotGradeGroup, type GroupedDotLayout } from './dot-layout'
 export { GLOSSARY, TERM_IDS, lookupTerm, type TermId, type GlossaryEntry } from './glossary'
+export {
+  adviseOnScenario,
+  type Finding,
+  type Severity,
+  type AdvisorContext,
+} from './advisor'
+export {
+  costToClearGreenCircles,
+  compareOverMaxModes,
+  projectCyclesToMidpoint,
+  zeroIncreaseEmployees,
+  structureHealth,
+} from './remediation'

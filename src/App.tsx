@@ -19,6 +19,8 @@ import {
   GROUP_BY_GRADE,
 } from './lib/grouping'
 import { runScenario, fitToBudgetFactor } from './lib/run-scenario'
+import { adviseOnScenario } from './lib/advisor'
+import { compareOverMaxModes } from './lib/remediation'
 import {
   setMatrixCell,
   setBandBoundary,
@@ -256,6 +258,24 @@ export default function App() {
     }
     return null
   }, [searchMatch, highlightedGroupKey, hoveredCell, scenario.results, activeGroupBy, attributeOf])
+
+  const findings = useMemo(() => {
+    if (!hasData) return []
+    return adviseOnScenario({
+      scenario,
+      employees,
+      grades,
+      matrix,
+      settings,
+      modeOutcomes: compareOverMaxModes(
+        employees,
+        grades,
+        matrix,
+        settings,
+        runScenario,
+      ),
+    })
+  }, [hasData, scenario, employees, grades, matrix, settings])
 
   const fitFactor = fitToBudgetFactor(
     scenario.budget.budgetSpendPercent,
@@ -688,6 +708,7 @@ export default function App() {
               highlightedGroupKey={highlightedGroupKey}
               onHighlightGroup={setHighlightedGroupKey}
               isDemographicGrouping={isDemographicGrouping}
+              findings={findings}
               errors={errors}
               warnings={warnings}
             />
