@@ -1,23 +1,25 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { Panel, Stat } from './components/Panel'
 import { IssueList } from './components/IssueList'
-import { GradeProfileTable } from './components/GradeProfileTable'
+import { GradeTable } from './components/GradeTable'
 import { PasteArea, ActionButton } from './components/PasteArea'
 import { MeritMatrixGrid } from './components/MeritMatrixGrid'
+import { SettingsPanel } from './components/SettingsPanel'
+import { CostPanel } from './components/CostPanel'
 import { importEmployeesFromCsv } from './lib/import-employees'
 import { importGradesFromCsv } from './lib/import-grades'
 import { profilePopulation } from './lib/population-profile'
-import { runScenario } from './lib/run-scenario'
+import { runScenario, fitToBudgetFactor } from './lib/run-scenario'
 import {
   setMatrixCell,
   setBandBoundary,
   addRatingRow,
   removeRatingRow,
+  scaleMatrix,
 } from './lib/matrix-edit'
 import {
   formatCompaRatio,
   formatCount,
-  formatCurrencyCompact,
   formatPercent,
   pluralize,
 } from './lib/format'
@@ -25,7 +27,7 @@ import { SAMPLE_POPULATION } from './data/sample-population'
 import { SAMPLE_GRADES } from './data/sample-structure'
 import { DEFAULT_MERIT_MATRIX, DEFAULT_SETTINGS } from './data/default-matrix'
 import type { ImportIssue } from './lib/import-employees'
-import type { MeritMatrix } from './types/domain'
+import type { MeritMatrix, ScenarioSettings } from './types/domain'
 
 const POPULATION_PLACEHOLDER = `employee_id,grade,base_salary,performance_rating,fte,eligible,hire_date
 E001,G3,74500,Meets,1,Y,2019-04-01
@@ -35,12 +37,18 @@ const STRUCTURE_PLACEHOLDER = `grade,name,order,min,mid,max
 G1,Analyst,1,51000,60000,69000
 G2,Senior Analyst,2,56500,67000,77500`
 
+/** Long enough to see which cells moved, short enough not to be a wait. */
+const FIT_ANIMATION_MS = 400
+
 export default function App() {
   const [populationText, setPopulationText] = useState('')
   const [structureText, setStructureText] = useState('')
   const [sampleLoaded, setSampleLoaded] = useState(false)
   const [matrix, setMatrix] = useState<MeritMatrix>(DEFAULT_MERIT_MATRIX)
+  const [settings, setSettings] = useState<ScenarioSettings>(DEFAULT_SETTINGS)
   const [newRating, setNewRating] = useState('')
+  const animationRef = useRef<number | null>(null)
+  const settleRef = useRef<number | null>(null)
 
   // Everything below recomputes on every keystroke. There is no server, so
   // there is nothing that could be loading and no reason to make anyone wait.
@@ -75,8 +83,8 @@ export default function App() {
   )
 
   const scenario = useMemo(
-    () => runScenario(employees, grades, matrix, DEFAULT_SETTINGS),
-    [employees, grades, matrix],
+    () => runScenario(employees, grades, matrix, settings),
+    [employees, grades, matrix, settings],
   )
 
   const errors: ImportIssue[] = [
@@ -89,8 +97,15 @@ export default function App() {
   ]
 
   const hasData = employees.length > 0 && grades.length > 0
-  const uncosted = scenario.results.filter((r) => r.excluded)
-  const noMatrixCell = uncosted.filter((r) => r.exclusionReason === 'no-matrix-cell')
+  const noMatrixCell = scenario.results.filter(
+    (r) => r.exclusionReason === 'no-matrix-cell',
+  )
+  const cappedCount = scenario.results.filter((r) => r.reducedByCap > 0).length
+
+  const fitFactor = fitToBudgetFactor(
+    scenario.budget.budgetSpendPercent,
+    settings.targetBudgetPercent,
+  )
 
   const loadSample = () => {
     setSampleLoaded(true)
@@ -111,6 +126,55 @@ export default function App() {
     setNewRating('')
   }
 
+  const cancelPendingFit = () => {
+    if (animationRef.current !== null) cancelAnimationFrame(animationRef.current)
+    if (settleRef.current !== null) clearTimeout(settleRef.current)
+    animationRef.current = null
+    settleRef.current = null
+  }
+
+  /**
+   * Scale the whole matrix onto the target budget.
+   *
+   * Animated rather than snapped, so the user can see which cells moved and by
+   * how much. Scaling preserves the shape of the plan design and changes only
+   * its magnitude, which is what a practitioner means by landing on a number.
+   *
+   * The animation is decoration; the result is not. Animation frames stop
+   * arriving whenever the page is not painting — a background tab, a minimised
+   * window — so a timer applies the final matrix regardless. Without it,
+   * clicking the button in a tab that happens not to be drawing does nothing at
+   * all, which is a far worse failure than a missing animation.
+   */
+  const fitToBudget = () => {
+    if (fitFactor === null) return
+
+    const start = matrix
+    const settled = scaleMatrix(start, fitFactor)
+    cancelPendingFit()
+
+    const prefersReducedMotion =
+      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
+    if (prefersReducedMotion) {
+      setMatrix(settled)
+      return
+    }
+
+    const startedAt = performance.now()
+    const step = (now: number) => {
+      const progress = Math.min((now - startedAt) / FIT_ANIMATION_MS, 1)
+      const eased = 1 - Math.pow(1 - progress, 3)
+      setMatrix(scaleMatrix(start, 1 + (fitFactor - 1) * eased))
+      animationRef.current = progress < 1 ? requestAnimationFrame(step) : null
+    }
+    animationRef.current = requestAnimationFrame(step)
+
+    settleRef.current = window.setTimeout(() => {
+      cancelPendingFit()
+      setMatrix(settled)
+    }, FIT_ANIMATION_MS + 50)
+  }
+
   return (
     <div className="min-h-screen bg-zinc-50 text-zinc-900">
       <header className="border-b border-zinc-200 px-6 py-3">
@@ -126,18 +190,7 @@ export default function App() {
       <main className="mx-auto grid max-w-[100rem] grid-cols-1 gap-10 px-6 py-8 xl:grid-cols-[minmax(0,40rem)_minmax(0,1fr)]">
         {/* Controls */}
         <div>
-          <Panel
-            title="Merit matrix"
-            aside={
-              hasData ? (
-                <span className="tabular-nums">
-                  {formatCurrencyCompact(scenario.budget.totalSpend)} ·{' '}
-                  {formatPercent(scenario.budget.budgetSpendPercent)} of eligible
-                  payroll
-                </span>
-              ) : undefined
-            }
-          >
+          <Panel title="Merit matrix">
             <MeritMatrixGrid
               matrix={matrix}
               totals={scenario.matrixCells}
@@ -152,7 +205,7 @@ export default function App() {
               }
             />
 
-            <div className="mt-3 flex items-center gap-2">
+            <div className="mt-3 flex flex-wrap items-center gap-2">
               <input
                 type="text"
                 value={newRating}
@@ -162,7 +215,7 @@ export default function App() {
                 }}
                 placeholder="Add a rating row"
                 aria-label="Add a rating row"
-                className="w-44 rounded border border-zinc-300 bg-white px-2 py-1 text-xs placeholder:text-zinc-300 focus:border-zinc-500 focus:outline-none"
+                className="w-40 rounded border border-zinc-300 bg-white px-2 py-1 text-xs placeholder:text-zinc-300 focus:border-zinc-500 focus:outline-none"
               />
               <ActionButton onClick={commitNewRating} disabled={newRating.trim() === ''}>
                 Add
@@ -170,6 +223,14 @@ export default function App() {
               <ActionButton onClick={() => setMatrix(DEFAULT_MERIT_MATRIX)}>
                 Reset matrix
               </ActionButton>
+              <ActionButton onClick={fitToBudget} disabled={fitFactor === null}>
+                Fit to budget
+              </ActionButton>
+              {fitFactor !== null && hasData ? (
+                <span className="text-[11px] tabular-nums text-zinc-400">
+                  scales every cell by {fitFactor.toFixed(3)}
+                </span>
+              ) : null}
             </div>
 
             {noMatrixCell.length > 0 ? (
@@ -179,6 +240,10 @@ export default function App() {
                 costed. Add the rating above, or correct the data.
               </p>
             ) : null}
+          </Panel>
+
+          <Panel title="Plan settings">
+            <SettingsPanel settings={settings} onChange={setSettings} />
           </Panel>
 
           <Panel
@@ -223,7 +288,7 @@ export default function App() {
               value={populationText}
               onChange={setPopulationText}
               placeholder={POPULATION_PLACEHOLDER}
-              rows={6}
+              rows={5}
             />
             <p className="mt-2 text-[11px] leading-relaxed text-zinc-400">
               CSV or a column range copied from a spreadsheet. Needs an id, grade,
@@ -241,7 +306,7 @@ export default function App() {
               value={structureText}
               onChange={setStructureText}
               placeholder={STRUCTURE_PLACEHOLDER}
-              rows={5}
+              rows={4}
             />
             <p className="mt-2 text-[11px] leading-relaxed text-zinc-400">
               Needs a grade code, minimum and maximum. Midpoint is derived from the
@@ -255,13 +320,24 @@ export default function App() {
         <div>
           {hasData ? (
             <>
-              <Panel title="Profile">
-                <div className="grid grid-cols-2 gap-6 sm:grid-cols-4">
-                  <Stat
-                    label="Eligible payroll"
-                    value={formatCurrencyCompact(profile.eligiblePayroll)}
-                    detail={`of ${formatCurrencyCompact(profile.totalPayroll)} total`}
-                  />
+              <Panel title="Cost">
+                <CostPanel
+                  budget={scenario.budget}
+                  overMaxMode={settings.overMaxMode}
+                  cappedCount={cappedCount}
+                />
+              </Panel>
+
+              <Panel title="By grade">
+                <GradeTable
+                  profile={profile}
+                  grades={grades}
+                  byGrade={scenario.byGrade}
+                />
+              </Panel>
+
+              <Panel title="Population profile" aside="before the cycle">
+                <div className="grid grid-cols-3 gap-6">
                   <Stat
                     label="Median compa-ratio"
                     value={formatCompaRatio(profile.medianCompaRatio)}
@@ -296,10 +372,6 @@ export default function App() {
                     of every average. They are still counted in headcount and payroll.
                   </p>
                 ) : null}
-              </Panel>
-
-              <Panel title="By grade">
-                <GradeProfileTable profile={profile} grades={grades} />
               </Panel>
 
               <Panel title="Rating distribution">
