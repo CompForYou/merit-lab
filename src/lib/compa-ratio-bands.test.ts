@@ -12,7 +12,7 @@ describe('DEFAULT_COMPA_RATIO_BANDS', () => {
       '0.80 - 0.90',
       '0.90 - 1.00',
       '1.00 - 1.10',
-      'Above 1.10',
+      '1.10 and above',
     ])
   })
 
@@ -44,7 +44,7 @@ describe('assignCompaRatioBand — values inside each band', () => {
     expect(bandFor(1.05)).toBe('1.00 - 1.10')
   })
   it('places 1.30 above 1.10', () => {
-    expect(bandFor(1.3)).toBe('Above 1.10')
+    expect(bandFor(1.3)).toBe('1.10 and above')
   })
 })
 
@@ -67,7 +67,7 @@ describe('assignCompaRatioBand — boundary behaviour', () => {
   })
 
   it('places exactly 1.10 above 1.10', () => {
-    expect(bandFor(1.1)).toBe('Above 1.10')
+    expect(bandFor(1.1)).toBe('1.10 and above')
   })
 
   it('places a hair below a boundary in the lower band', () => {
@@ -82,7 +82,7 @@ describe('assignCompaRatioBand — extremes and failures', () => {
   })
 
   it('places a very high compa-ratio in the top band', () => {
-    expect(bandFor(5)).toBe('Above 1.10')
+    expect(bandFor(5)).toBe('1.10 and above')
   })
 
   it('returns null when the compa-ratio could not be calculated', () => {
@@ -110,10 +110,10 @@ describe('assignCompaRatioBand — user-defined bands', () => {
     const threeBands: CompaRatioBand[] = [
       { id: 'lo', label: 'Below 0.90', lowerBound: null, upperBound: 0.9 },
       { id: 'mid', label: '0.90 - 1.10', lowerBound: 0.9, upperBound: 1.1 },
-      { id: 'hi', label: 'Above 1.10', lowerBound: 1.1, upperBound: null },
+      { id: 'hi', label: '1.10 and above', lowerBound: 1.1, upperBound: null },
     ]
     expect(assignCompaRatioBand(0.85, threeBands)?.label).toBe('Below 0.90')
     expect(assignCompaRatioBand(1.0, threeBands)?.label).toBe('0.90 - 1.10')
-    expect(assignCompaRatioBand(1.1, threeBands)?.label).toBe('Above 1.10')
+    expect(assignCompaRatioBand(1.1, threeBands)?.label).toBe('1.10 and above')
   })
 })

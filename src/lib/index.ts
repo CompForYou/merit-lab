@@ -63,3 +63,15 @@ export {
   type GradeProfile,
 } from './population-profile'
 export * from './format'
+export * from './matrix-edit'
+export {
+  summarizeMatrixCells,
+  findCell,
+  type MatrixCellSummary,
+  type MatrixCellTotals,
+} from './matrix-cells'
+export {
+  runScenario,
+  fitToBudgetFactor,
+  type ScenarioResults,
+} from './run-scenario'

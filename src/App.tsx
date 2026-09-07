@@ -3,9 +3,17 @@ import { Panel, Stat } from './components/Panel'
 import { IssueList } from './components/IssueList'
 import { GradeProfileTable } from './components/GradeProfileTable'
 import { PasteArea, ActionButton } from './components/PasteArea'
+import { MeritMatrixGrid } from './components/MeritMatrixGrid'
 import { importEmployeesFromCsv } from './lib/import-employees'
 import { importGradesFromCsv } from './lib/import-grades'
 import { profilePopulation } from './lib/population-profile'
+import { runScenario } from './lib/run-scenario'
+import {
+  setMatrixCell,
+  setBandBoundary,
+  addRatingRow,
+  removeRatingRow,
+} from './lib/matrix-edit'
 import {
   formatCompaRatio,
   formatCount,
@@ -15,7 +23,9 @@ import {
 } from './lib/format'
 import { SAMPLE_POPULATION } from './data/sample-population'
 import { SAMPLE_GRADES } from './data/sample-structure'
+import { DEFAULT_MERIT_MATRIX, DEFAULT_SETTINGS } from './data/default-matrix'
 import type { ImportIssue } from './lib/import-employees'
+import type { MeritMatrix } from './types/domain'
 
 const POPULATION_PLACEHOLDER = `employee_id,grade,base_salary,performance_rating,fte,eligible,hire_date
 E001,G3,74500,Meets,1,Y,2019-04-01
@@ -29,6 +39,8 @@ export default function App() {
   const [populationText, setPopulationText] = useState('')
   const [structureText, setStructureText] = useState('')
   const [sampleLoaded, setSampleLoaded] = useState(false)
+  const [matrix, setMatrix] = useState<MeritMatrix>(DEFAULT_MERIT_MATRIX)
+  const [newRating, setNewRating] = useState('')
 
   // Everything below recomputes on every keystroke. There is no server, so
   // there is nothing that could be loading and no reason to make anyone wait.
@@ -62,6 +74,11 @@ export default function App() {
     [employees, grades],
   )
 
+  const scenario = useMemo(
+    () => runScenario(employees, grades, matrix, DEFAULT_SETTINGS),
+    [employees, grades, matrix],
+  )
+
   const errors: ImportIssue[] = [
     ...(structureImport?.errors ?? []),
     ...(populationImport?.errors ?? []),
@@ -72,6 +89,8 @@ export default function App() {
   ]
 
   const hasData = employees.length > 0 && grades.length > 0
+  const uncosted = scenario.results.filter((r) => r.excluded)
+  const noMatrixCell = uncosted.filter((r) => r.exclusionReason === 'no-matrix-cell')
 
   const loadSample = () => {
     setSampleLoaded(true)
@@ -85,10 +104,17 @@ export default function App() {
     setStructureText('')
   }
 
+  const commitNewRating = () => {
+    const name = newRating.trim()
+    if (name === '') return
+    setMatrix((current) => addRatingRow(current, name))
+    setNewRating('')
+  }
+
   return (
     <div className="min-h-screen bg-zinc-50 text-zinc-900">
       <header className="border-b border-zinc-200 px-6 py-3">
-        <div className="mx-auto flex max-w-7xl items-baseline justify-between gap-6">
+        <div className="mx-auto flex max-w-[100rem] items-baseline justify-between gap-6">
           <h1 className="text-sm font-semibold tracking-tight">Merit Lab</h1>
           <p className="text-[11px] text-zinc-500">
             Runs entirely in your browser. Nothing you paste is uploaded, transmitted,
@@ -97,9 +123,64 @@ export default function App() {
         </div>
       </header>
 
-      <main className="mx-auto grid max-w-7xl grid-cols-1 gap-10 px-6 py-8 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
+      <main className="mx-auto grid max-w-[100rem] grid-cols-1 gap-10 px-6 py-8 xl:grid-cols-[minmax(0,40rem)_minmax(0,1fr)]">
         {/* Controls */}
         <div>
+          <Panel
+            title="Merit matrix"
+            aside={
+              hasData ? (
+                <span className="tabular-nums">
+                  {formatCurrencyCompact(scenario.budget.totalSpend)} ·{' '}
+                  {formatPercent(scenario.budget.budgetSpendPercent)} of eligible
+                  payroll
+                </span>
+              ) : undefined
+            }
+          >
+            <MeritMatrixGrid
+              matrix={matrix}
+              totals={scenario.matrixCells}
+              onCellChange={(rating, bandId, percent) =>
+                setMatrix((current) => setMatrixCell(current, rating, bandId, percent))
+              }
+              onBoundaryChange={(index, value) =>
+                setMatrix((current) => setBandBoundary(current, index, value))
+              }
+              onRemoveRating={(rating) =>
+                setMatrix((current) => removeRatingRow(current, rating))
+              }
+            />
+
+            <div className="mt-3 flex items-center gap-2">
+              <input
+                type="text"
+                value={newRating}
+                onChange={(e) => setNewRating(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') commitNewRating()
+                }}
+                placeholder="Add a rating row"
+                aria-label="Add a rating row"
+                className="w-44 rounded border border-zinc-300 bg-white px-2 py-1 text-xs placeholder:text-zinc-300 focus:border-zinc-500 focus:outline-none"
+              />
+              <ActionButton onClick={commitNewRating} disabled={newRating.trim() === ''}>
+                Add
+              </ActionButton>
+              <ActionButton onClick={() => setMatrix(DEFAULT_MERIT_MATRIX)}>
+                Reset matrix
+              </ActionButton>
+            </div>
+
+            {noMatrixCell.length > 0 ? (
+              <p className="mt-3 text-xs text-amber-800">
+                {pluralize(noMatrixCell.length, 'employee')} carry a rating with no row
+                in this matrix and {noMatrixCell.length === 1 ? 'was' : 'were'} not
+                costed. Add the rating above, or correct the data.
+              </p>
+            ) : null}
+          </Panel>
+
           <Panel
             title="Population"
             aside={
@@ -142,7 +223,7 @@ export default function App() {
               value={populationText}
               onChange={setPopulationText}
               placeholder={POPULATION_PLACEHOLDER}
-              rows={7}
+              rows={6}
             />
             <p className="mt-2 text-[11px] leading-relaxed text-zinc-400">
               CSV or a column range copied from a spreadsheet. Needs an id, grade,
@@ -160,7 +241,7 @@ export default function App() {
               value={structureText}
               onChange={setStructureText}
               placeholder={STRUCTURE_PLACEHOLDER}
-              rows={6}
+              rows={5}
             />
             <p className="mt-2 text-[11px] leading-relaxed text-zinc-400">
               Needs a grade code, minimum and maximum. Midpoint is derived from the

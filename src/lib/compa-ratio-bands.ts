@@ -16,7 +16,10 @@ export const DEFAULT_COMPA_RATIO_BANDS: CompaRatioBand[] = [
   { id: 'band-080-090', label: '0.80 - 0.90', lowerBound: 0.8, upperBound: 0.9 },
   { id: 'band-090-100', label: '0.90 - 1.00', lowerBound: 0.9, upperBound: 1.0 },
   { id: 'band-100-110', label: '1.00 - 1.10', lowerBound: 1.0, upperBound: 1.1 },
-  { id: 'band-above-110', label: 'Above 1.10', lowerBound: 1.1, upperBound: null },
+  // '1.10 and above', not 'Above 1.10': the lower bound is inclusive, so a
+  // compa-ratio of exactly 1.10 belongs to this band. The shorter label implies
+  // the opposite and would misdescribe the behaviour.
+  { id: 'band-above-110', label: '1.10 and above', lowerBound: 1.1, upperBound: null },
 ]
 
 /**

@@ -21,6 +21,8 @@ export interface EmployeeMeritResult {
   gradeId: string
   /** Carried through so downstream aggregates can gross salaries to full-time. */
   fte: number
+  /** Carried through so results can be grouped back into matrix cells. */
+  performanceRating: string
   eligible: boolean
   /** True when the employee could not be costed at all. Never silently zero. */
   excluded: boolean
@@ -85,6 +87,7 @@ export function calculateEmployeeMerit(
     employeeId: employee.id,
     gradeId: employee.gradeId,
     fte,
+    performanceRating: employee.performanceRating,
     eligible: employee.eligible,
     baseSalary: base,
     uncappedIncreaseAmount: 0,
@@ -226,6 +229,7 @@ export function calculateEmployeeMerit(
     employeeId: employee.id,
     gradeId: employee.gradeId,
     fte,
+    performanceRating: employee.performanceRating,
     eligible: true,
     excluded: false,
     exclusionReason: null,
