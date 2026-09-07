@@ -8,6 +8,7 @@ import {
   formatPercentSigned,
   pluralize,
 } from '../lib/format'
+import { Explain } from './Explain'
 
 const MODE_LABEL: Record<OverMaxMode, string> = {
   capAtMax: 'Capped at maximum',
@@ -41,7 +42,7 @@ export function CostPanel({
       <div className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-4">
         <figure>
           <figcaption className="text-[11px] uppercase tracking-[0.08em] text-zinc-400">
-            Spend
+            Spend<Explain term="merit-budget" />
           </figcaption>
           <div className="mt-1 text-3xl font-medium tabular-nums">
             {formatPercent(budget.budgetSpendPercent)}
@@ -53,7 +54,7 @@ export function CostPanel({
 
         <figure>
           <figcaption className="text-[11px] uppercase tracking-[0.08em] text-zinc-400">
-            Cost
+            Cost<Explain term="total-spend" />
           </figcaption>
           <div className="mt-1 text-3xl font-medium tabular-nums">
             {formatCurrencyCompact(budget.totalSpend)}
@@ -62,12 +63,13 @@ export function CostPanel({
             {budget.lumpSumCost > 0
               ? `${formatCurrencyCompact(budget.baseBuildCost)} to base`
               : formatCurrency(budget.totalSpend)}
+            {budget.lumpSumCost > 0 ? <Explain term="base-build" /> : null}
           </div>
         </figure>
 
         <figure>
           <figcaption className="text-[11px] uppercase tracking-[0.08em] text-zinc-400">
-            Variance
+            Variance<Explain term="variance" />
           </figcaption>
           <div className={`mt-1 text-3xl font-medium tabular-nums ${varianceTone}`}>
             {formatCurrencySigned(budget.varianceToTargetDollars)}
@@ -79,7 +81,7 @@ export function CostPanel({
 
         <figure>
           <figcaption className="text-[11px] uppercase tracking-[0.08em] text-zinc-400">
-            Eligible payroll
+            Eligible payroll<Explain term="eligible-payroll" />
           </figcaption>
           <div className="mt-1 text-3xl font-medium tabular-nums">
             {formatCurrencyCompact(budget.eligiblePayroll)}
@@ -97,6 +99,7 @@ export function CostPanel({
         {budget.reducedByCap > 0 ? (
           <span className="text-amber-700">
             {formatCurrency(budget.reducedByCap)} withheld at the maximum
+            <Explain term="withheld-at-maximum" />
             {cappedCount > 0 ? `, affecting ${pluralize(cappedCount, 'employee')}` : ''}
           </span>
         ) : (
@@ -106,6 +109,7 @@ export function CostPanel({
         {budget.lumpSumCost > 0 ? (
           <span className="text-zinc-600">
             {formatCurrency(budget.lumpSumCost)} paid as lump sums, not built into base
+            <Explain term="lump-sum" />
           </span>
         ) : null}
 
@@ -118,6 +122,7 @@ export function CostPanel({
         {budget.excludedHeadcount > 0 ? (
           <span className="text-amber-700">
             {pluralize(budget.excludedHeadcount, 'employee')} could not be costed
+            <Explain term="not-costed" />
           </span>
         ) : null}
       </div>

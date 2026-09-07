@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { OverMaxMode, ScenarioSettings } from '../types/domain'
 import { formatPercent } from '../lib/format'
+import { Explain } from './Explain'
 
 const OVER_MAX_MODES: { value: OverMaxMode; label: string; help: string }[] = [
   {
@@ -44,7 +45,7 @@ export function SettingsPanel({
       <div>
         <div className="mb-1.5 flex items-baseline justify-between">
           <span className="text-[11px] uppercase tracking-[0.08em] text-zinc-400">
-            Over maximum
+            Over maximum<Explain term="over-max-modes" />
           </span>
         </div>
         <div className="inline-flex rounded border border-zinc-300 bg-white p-0.5">
@@ -71,7 +72,7 @@ export function SettingsPanel({
 
       <div>
         <div className="mb-1.5 text-[11px] uppercase tracking-[0.08em] text-zinc-400">
-          Proration
+          Proration<Explain term="proration" />
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -142,7 +143,7 @@ function TargetBudget({
     <div>
       <div className="mb-1.5 flex items-baseline justify-between">
         <span className="text-[11px] uppercase tracking-[0.08em] text-zinc-400">
-          Target budget
+          Target budget<Explain term="merit-budget" />
         </span>
         <span className="flex items-baseline gap-0.5 text-sm tabular-nums text-zinc-900">
           <input

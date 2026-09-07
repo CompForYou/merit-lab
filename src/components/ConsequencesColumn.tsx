@@ -1,4 +1,5 @@
 import { Panel } from './Panel'
+import { Explain } from './Explain'
 import { CostPanel } from './CostPanel'
 import { DotPlot } from './DotPlot'
 import { GradeTable } from './GradeTable'
@@ -88,9 +89,12 @@ export function ConsequencesColumn({
       <Panel
         title="Above the maximum"
         aside={
-          scenario.distribution.countCrossedMaximum > 0
-            ? `${formatCount(scenario.distribution.countCrossedMaximum)} crossed this cycle`
-            : 'none crossed this cycle'
+          <>
+            {scenario.distribution.countCrossedMaximum > 0
+              ? `${formatCount(scenario.distribution.countCrossedMaximum)} crossed this cycle`
+              : 'none crossed this cycle'}
+            <Explain term="red-circled" />
+          </>
         }
       >
         <OutOfRangeList
@@ -106,7 +110,10 @@ export function ConsequencesColumn({
         />
       </Panel>
 
-      <Panel title="Below the minimum" aside="green-circled">
+      <Panel
+        title="Below the minimum"
+        aside={<>green-circled<Explain term="green-circled" /></>}
+      >
         <OutOfRangeList
           title="remain below their range minimum"
           results={belowMinimum}

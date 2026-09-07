@@ -22,5 +22,10 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src"]
+  "include": ["src"],
+
+  /* Tests are typechecked by tsconfig.test.json, which additionally grants them
+     Node types. Keeping them out of the app build means browser code can never
+     reach the filesystem APIs by accident. */
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
 }

@@ -8,6 +8,7 @@ import {
   formatCurrencyCompact,
   formatPercent,
 } from '../lib/format'
+import { Explain } from './Explain'
 import { calculateRangeSpread } from '../lib/range-spread'
 
 /**
@@ -54,12 +55,20 @@ export function GradeTable({
           <tr className="text-[11px] uppercase tracking-[0.08em] text-zinc-400">
             <th className="pb-2 pr-3 text-left font-medium">Grade</th>
             <th className="px-2 pb-2 text-right font-medium">N</th>
-            <th className="px-2 pb-2 text-right font-medium">Mid</th>
-            <th className="px-2 pb-2 text-right font-medium">Med CR</th>
+            <th className="px-2 pb-2 text-right font-medium">
+              Mid<Explain term="range-spread" />
+            </th>
+            <th className="px-2 pb-2 text-right font-medium">
+              Med CR<Explain term="compa-ratio" />
+            </th>
             <th className="px-2 pb-2 text-right font-medium">Payroll</th>
-            <th className="px-2 pb-2 text-right font-medium">Cost</th>
+            <th className="px-2 pb-2 text-right font-medium">
+              Cost<Explain term="cell-cost" />
+            </th>
             <th className="px-2 pb-2 text-right font-medium">Spend</th>
-            <th className="pb-2 pl-2 text-right font-medium">Out</th>
+            <th className="pb-2 pl-2 text-right font-medium">
+              Out<Explain term="range-penetration" />
+            </th>
           </tr>
         </thead>
         <tbody className="tabular-nums">

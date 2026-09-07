@@ -6,6 +6,7 @@ import { SettingsPanel } from './components/SettingsPanel'
 import { ScenarioBar } from './components/ScenarioBar'
 import { ConsequencesColumn } from './components/ConsequencesColumn'
 import { HeadlineStrip } from './components/HeadlineStrip'
+import { Explain } from './components/Explain'
 import { RatingBars } from './components/RatingBars'
 import { IssueList } from './components/IssueList'
 import { importEmployeesFromCsv } from './lib/import-employees'
@@ -442,6 +443,7 @@ export default function App() {
               <ActionButton onClick={fitToBudget} disabled={fitFactor === null}>
                 Fit to budget
               </ActionButton>
+              <Explain term="fit-to-budget" />
               {fitFactor !== null && hasData ? (
                 <span className="text-[11px] tabular-nums text-zinc-400">
                   scales every cell by {fitFactor.toFixed(3)}

@@ -1,6 +1,7 @@
 import type { CompressionPair } from '../lib/compression'
 import { MIN_HEADCOUNT_FOR_COMPRESSION_FLAG } from '../lib/compression'
 import { formatCount, formatCurrency, formatPercent } from '../lib/format'
+import { Explain } from './Explain'
 
 /**
  * The compression indicator.
@@ -28,11 +29,15 @@ export function CompressionTable({ pairs }: { pairs: CompressionPair[] }) {
         <table className="w-full border-collapse text-xs">
           <thead>
             <tr className="text-[11px] uppercase tracking-[0.08em] text-zinc-400">
-              <th className="pb-2 pr-3 text-left font-medium">Grade step</th>
+              <th className="pb-2 pr-3 text-left font-medium">
+                Grade step<Explain term="midpoint-progression" />
+              </th>
               <th className="px-2 pb-2 text-right font-medium">N</th>
               <th className="px-2 pb-2 text-right font-medium">Before</th>
               <th className="px-2 pb-2 text-right font-medium">After</th>
-              <th className="pb-2 pl-2 text-right font-medium">Change</th>
+              <th className="pb-2 pl-2 text-right font-medium">
+                Change<Explain term="compression-differential" />
+              </th>
             </tr>
           </thead>
           <tbody className="tabular-nums">

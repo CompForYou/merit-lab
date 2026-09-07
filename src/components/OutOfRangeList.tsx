@@ -1,11 +1,13 @@
 import type { EmployeeMeritResult } from '../lib/merit-increase'
 import type { Grade } from '../types/domain'
+import type { TermId } from '../lib/glossary'
 import {
   formatCompaRatio,
   formatCurrency,
   formatPercent,
   pluralize,
 } from '../lib/format'
+import { Explain } from './Explain'
 
 /** How many rows to show before collapsing to a count. */
 const VISIBLE_ROWS = 10
@@ -91,6 +93,7 @@ export function OutOfRangeList({
       <p className="mt-2 text-[11px] leading-relaxed text-zinc-400">
         Salaries shown on a full-time equivalent basis, so they compare directly
         with the range bound.
+        <Explain term="fte-handling" />
       </p>
     </div>
   )
@@ -113,7 +116,12 @@ export function DistributionShift({
 
   return (
     <div className="flex flex-wrap items-baseline gap-x-8 gap-y-3">
-      <ShiftFigure label="Median compa-ratio" before={medianBefore} after={medianAfter} />
+      <ShiftFigure
+        label="Median compa-ratio"
+        term="compa-ratio"
+        before={medianBefore}
+        after={medianAfter}
+      />
       <ShiftFigure label="Mean compa-ratio" before={meanBefore} after={meanAfter} />
       <div>
         <div className="text-[11px] uppercase tracking-[0.08em] text-zinc-400">
@@ -134,10 +142,12 @@ export function DistributionShift({
 
 function ShiftFigure({
   label,
+  term,
   before,
   after,
 }: {
   label: string
+  term?: TermId
   before: number | null
   after: number | null
 }) {
@@ -145,6 +155,7 @@ function ShiftFigure({
     <div>
       <div className="text-[11px] uppercase tracking-[0.08em] text-zinc-400">
         {label}
+        {term ? <Explain term={term} /> : null}
       </div>
       <div className="mt-1 flex items-baseline gap-2 tabular-nums">
         <span className="text-lg text-zinc-400">{formatCompaRatio(before)}</span>

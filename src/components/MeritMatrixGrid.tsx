@@ -11,6 +11,7 @@ import {
   formatPercent,
   pluralize,
 } from '../lib/format'
+import { Explain } from './Explain'
 
 /**
  * The merit matrix: rating rows, compa-ratio band columns, an increase
@@ -69,7 +70,7 @@ export function MeritMatrixGrid({
                 </th>
               ))}
               <th className="w-24 pb-2 pl-2 text-right align-bottom text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-400">
-                Row cost
+                Row cost<Explain term="cell-cost" />
               </th>
             </tr>
           </thead>
@@ -138,7 +139,7 @@ export function MeritMatrixGrid({
           <tfoot>
             <tr className="border-t-2 border-zinc-300">
               <td className="py-1.5 pr-2 text-[11px] uppercase tracking-[0.08em] text-zinc-400">
-                Band cost
+                Band cost<Explain term="compa-ratio-band" />
               </td>
               {matrix.bands.map((band) => (
                 <td
