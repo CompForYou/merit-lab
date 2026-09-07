@@ -45,3 +45,11 @@ export {
   type CompressionPair,
 } from './compression'
 export { mean, median } from './statistics'
+
+export { parseDelimitedText, normalizeHeader } from './csv'
+export {
+  importEmployeesFromCsv,
+  type EmployeeImportResult,
+  type EmployeeImportOptions,
+  type ImportIssue,
+} from './import-employees'

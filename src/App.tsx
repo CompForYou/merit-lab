@@ -12,7 +12,7 @@ const FORMULAS: { name: string; formula: string }[] = [
   { name: 'Compression indicator', formula: '(higherMedian - lowerMedian) / lowerMedian' },
 ]
 
-const TEST_COUNT = 198
+const TEST_COUNT = 262
 
 export default function App() {
   return (
