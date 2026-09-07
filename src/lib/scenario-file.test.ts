@@ -178,3 +178,65 @@ describe('scenarioFileName', () => {
     )
   })
 })
+
+describe('scenario file version 2', () => {
+  it('round-trips the new settings', () => {
+    const withNew: Scenario = {
+      ...SCENARIO,
+      settings: {
+        ...SCENARIO.settings,
+        roundingIncrement: 500,
+        currency: 'GBP',
+        locale: 'en-GB',
+      },
+    }
+    const back = parseScenarioFile(serializeScenario(withNew)).scenario!
+    expect(back.settings.roundingIncrement).toBe(500)
+    expect(back.settings.currency).toBe('GBP')
+    expect(back.settings.locale).toBe('en-GB')
+  })
+
+  it('loads a version 1 file and reproduces its figures exactly', () => {
+    // The whole point of the version guard. A file saved before rounding
+    // existed must not silently acquire it.
+    const v1 = JSON.stringify({
+      format: 'merit-lab-scenario',
+      version: 1,
+      savedAt: '2025-03-01T09:00:00.000Z',
+      scenario: {
+        ...SCENARIO,
+        settings: {
+          targetBudgetPercent: 0.0325,
+          overMaxMode: 'capAtMax',
+          prorationEnabled: false,
+          compressionThreshold: 0.02,
+        },
+      },
+    })
+    const parsed = parseScenarioFile(v1)
+    expect(parsed.errors).toEqual([])
+    expect(parsed.scenario!.settings.roundingIncrement).toBe(0)
+    expect(parsed.scenario!.settings.currency).toBe('USD')
+
+    const reloaded = runScenario(
+      parsed.scenario!.employees,
+      parsed.scenario!.grades,
+      parsed.scenario!.matrix,
+      parsed.scenario!.settings,
+    ).budget
+    const original = runScenario(
+      SCENARIO.employees, SCENARIO.grades, SCENARIO.matrix, SCENARIO.settings,
+    ).budget
+    expect(reloaded.totalSpend).toBe(original.totalSpend)
+  })
+
+  it('still refuses a file from a version it does not know', () => {
+    const future = JSON.stringify({
+      format: 'merit-lab-scenario',
+      version: SCENARIO_FILE_VERSION + 1,
+      savedAt: new Date().toISOString(),
+      scenario: SCENARIO,
+    })
+    expect(parseScenarioFile(future).scenario).toBeNull()
+  })
+})

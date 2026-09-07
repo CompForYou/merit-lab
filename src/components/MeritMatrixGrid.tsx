@@ -32,6 +32,9 @@ export function MeritMatrixGrid({
   onCellChange,
   onBoundaryChange,
   onRemoveRating,
+  onRenameRating,
+  onSplitBand,
+  onRemoveBand,
   hovered,
   onHoverChange,
 }: {
@@ -40,6 +43,10 @@ export function MeritMatrixGrid({
   onCellChange: (rating: string, bandId: string, percent: number) => void
   onBoundaryChange: (boundaryIndex: number, value: number) => void
   onRemoveRating: (rating: string) => void
+  onRenameRating: (from: string, to: string) => void
+  /** Split the band at this index in two, at the given compa-ratio. */
+  onSplitBand: (index: number, value: number) => void
+  onRemoveBand: (index: number) => void
   /** Lifted so the dot plot can dim everyone outside the hovered cell. */
   hovered: { rating: string; bandId: string } | null
   onHoverChange: (next: { rating: string; bandId: string } | null) => void
@@ -58,9 +65,33 @@ export function MeritMatrixGrid({
                 Rating
               </th>
               {matrix.bands.map((band, index) => (
-                <th key={band.id} className="px-1 pb-2 align-bottom">
-                  <div className="text-[11px] font-medium text-zinc-500">
-                    {band.label}
+                <th key={band.id} className="group/band px-1 pb-2 align-bottom">
+                  <div className="flex items-center justify-center gap-0.5">
+                    <span className="text-[11px] font-medium text-zinc-500">
+                      {band.label}
+                    </span>
+                    <span className="flex opacity-0 transition group-hover/band:opacity-100">
+                      <button
+                        type="button"
+                        aria-label={`Split the ${band.label} band`}
+                        title="Split this band in two"
+                        onClick={() => onSplitBand(index, splitPointFor(band))}
+                        className="px-0.5 text-[10px] text-zinc-300 hover:text-zinc-700"
+                      >
+                        ÷
+                      </button>
+                      {matrix.bands.length > 1 ? (
+                        <button
+                          type="button"
+                          aria-label={`Remove the ${band.label} band`}
+                          title="Remove this band, merging it into its neighbour"
+                          onClick={() => onRemoveBand(index)}
+                          className="px-0.5 text-[10px] text-zinc-300 hover:text-rose-600"
+                        >
+                          ×
+                        </button>
+                      ) : null}
+                    </span>
                   </div>
                   <BoundaryEditor
                     lowerBound={band.lowerBound}
@@ -80,7 +111,10 @@ export function MeritMatrixGrid({
               <tr key={rating} className="group border-t border-zinc-200">
                 <td className="py-1 pr-2 align-middle">
                   <div className="flex items-center gap-1">
-                    <span className="truncate text-zinc-900">{rating}</span>
+                    <RatingLabel
+                      rating={rating}
+                      onRename={(next) => onRenameRating(rating, next)}
+                    />
                     <button
                       type="button"
                       onClick={() => onRemoveRating(rating)}
@@ -242,5 +276,59 @@ function BoundaryEditor({
         className="h-5 w-full rounded-sm bg-transparent text-center text-[10px] tabular-nums text-zinc-400 outline-none hover:bg-zinc-100 focus:bg-white focus:text-zinc-900 focus:ring-1 focus:ring-zinc-400"
       />
     </div>
+  )
+}
+
+/**
+ * Where to cut a band when it is split.
+ *
+ * Halfway through a bounded band. An unbounded end has no midpoint, so it splits
+ * a tenth of a compa-ratio inside its only boundary — the width of the default
+ * bands, which reads as a deliberate step rather than an arbitrary one.
+ */
+function splitPointFor(band: {
+  lowerBound: number | null
+  upperBound: number | null
+}): number {
+  if (band.lowerBound !== null && band.upperBound !== null) {
+    return Math.round(((band.lowerBound + band.upperBound) / 2) * 100) / 100
+  }
+  if (band.upperBound !== null) return Math.round((band.upperBound - 0.1) * 100) / 100
+  if (band.lowerBound !== null) return Math.round((band.lowerBound + 0.1) * 100) / 100
+  return 1
+}
+
+/** A rating name, renamed in place. Its cells and its position follow the name. */
+function RatingLabel({
+  rating,
+  onRename,
+}: {
+  rating: string
+  onRename: (next: string) => void
+}) {
+  const [draft, setDraft] = useState<string | null>(null)
+
+  return (
+    <input
+      type="text"
+      aria-label={`Rating name: ${rating}`}
+      value={draft ?? rating}
+      onChange={(e) => setDraft(e.target.value)}
+      onFocus={() => setDraft(rating)}
+      onBlur={() => {
+        const next = (draft ?? '').trim()
+        // An empty name would leave a row nobody can identify, so it reverts.
+        if (next !== '' && next !== rating) onRename(next)
+        setDraft(null)
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') e.currentTarget.blur()
+        if (e.key === 'Escape') {
+          setDraft(null)
+          e.currentTarget.blur()
+        }
+      }}
+      className="w-full min-w-0 truncate rounded-sm bg-transparent text-zinc-900 outline-none hover:bg-zinc-100 focus:bg-white focus:ring-1 focus:ring-zinc-400"
+    />
   )
 }

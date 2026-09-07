@@ -20,15 +20,75 @@ function roundHalfAwayFromZero(value: number): number {
   return value < 0 ? -Math.round(-value) : Math.round(value)
 }
 
+/**
+ * The currency and locale every figure is rendered in.
+ *
+ * Held as module state rather than threaded through every call. Formatting is
+ * display-only and single-valued for the whole interface, and passing it into
+ * fifteen components would add a parameter to code that has no other reason to
+ * know about it. The compensation maths is unit-agnostic and untouched by this:
+ * a scenario is single-currency, exactly as the spec requires.
+ */
+export interface CurrencyFormat {
+  /** ISO 4217 code, e.g. USD, EUR, GBP. */
+  currency: string
+  /** BCP 47 tag, e.g. en-US, de-DE. Decides separators and symbol placement. */
+  locale: string
+}
+
+const DEFAULT_FORMAT: CurrencyFormat = { currency: 'USD', locale: 'en-US' }
+let activeFormat: CurrencyFormat = DEFAULT_FORMAT
+
+export function setCurrencyFormat(next: CurrencyFormat): void {
+  activeFormat = isUsable(next) ? next : DEFAULT_FORMAT
+}
+
+export function getCurrencyFormat(): CurrencyFormat {
+  return activeFormat
+}
+
+/** Restores the default. Used by tests so one cannot leak into the next. */
+export function resetCurrencyFormat(): void {
+  activeFormat = DEFAULT_FORMAT
+}
+
+/** An unknown code or locale throws inside Intl, which would take the page down. */
+function isUsable(format: CurrencyFormat): boolean {
+  try {
+    new Intl.NumberFormat(format.locale, {
+      style: 'currency',
+      currency: format.currency,
+    }).format(1)
+    return true
+  } catch {
+    return false
+  }
+}
+
+function currencyFormatter(): Intl.NumberFormat {
+  return new Intl.NumberFormat(activeFormat.locale, {
+    style: 'currency',
+    currency: activeFormat.currency,
+    maximumFractionDigits: 0,
+  })
+}
+
+/** Just the symbol, for building abbreviated figures like 1.71M. */
+export function currencySymbol(): string {
+  const parts = new Intl.NumberFormat(activeFormat.locale, {
+    style: 'currency',
+    currency: activeFormat.currency,
+  }).formatToParts(1)
+  return parts.find((part) => part.type === 'currency')?.value ?? ''
+}
+
 /** What a null renders as. Visually distinct from any real figure. */
 export const NO_VALUE = '—'
 
 /** Whole dollars with thousands separators: 95000 becomes $95,000. */
 export function formatCurrency(value: number | null | undefined): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return NO_VALUE
-  const rounded = roundHalfAwayFromZero(value)
-  const sign = rounded < 0 ? '-' : ''
-  return `${sign}$${Math.abs(rounded).toLocaleString('en-US')}`
+  return currencyFormatter().format(roundHalfAwayFromZero(value))
 }
 
 /**
@@ -41,10 +101,13 @@ export function formatCurrencyCompact(value: number | null | undefined): string 
 
   const sign = value < 0 ? '-' : ''
   const magnitude = Math.abs(value)
+  const symbol = currencySymbol()
 
-  if (magnitude >= 1_000_000) return `${sign}$${(magnitude / 1_000_000).toFixed(2)}M`
-  if (magnitude >= 10_000) return `${sign}$${Math.round(magnitude / 1_000)}K`
-  return `${sign}$${roundHalfAwayFromZero(magnitude).toLocaleString('en-US')}`
+  if (magnitude >= 1_000_000) {
+    return `${sign}${symbol}${(magnitude / 1_000_000).toFixed(2)}M`
+  }
+  if (magnitude >= 10_000) return `${sign}${symbol}${Math.round(magnitude / 1_000)}K`
+  return currencyFormatter().format(roundHalfAwayFromZero(value))
 }
 
 /**
@@ -85,7 +148,7 @@ export function formatCompaRatio(value: number | null | undefined): string {
 /** A headcount or any other integer. */
 export function formatCount(value: number | null | undefined): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return NO_VALUE
-  return roundHalfAwayFromZero(value).toLocaleString('en-US')
+  return roundHalfAwayFromZero(value).toLocaleString(activeFormat.locale)
 }
 
 /** "1 employee" / "204 employees", so labels do not read as a bug. */

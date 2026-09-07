@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, afterEach } from 'vitest'
 import {
   NO_VALUE,
   formatCurrency,
@@ -9,6 +9,9 @@ import {
   formatCompaRatio,
   formatCount,
   pluralize,
+  setCurrencyFormat,
+  getCurrencyFormat,
+  resetCurrencyFormat,
 } from './format'
 
 describe('formatCurrency', () => {
@@ -151,5 +154,58 @@ describe('null handling - the rule that matters', () => {
     expect(formatCurrency(0)).toBe('$0')
     expect(formatCompaRatio(0)).toBe('0.00')
     expect(formatCurrency(0)).not.toBe(NO_VALUE)
+  })
+})
+
+describe('currency and locale', () => {
+  afterEach(() => resetCurrencyFormat())
+
+  it('defaults to US dollars', () => {
+    expect(getCurrencyFormat()).toEqual({ currency: 'USD', locale: 'en-US' })
+    expect(formatCurrency(95_000)).toBe('$95,000')
+  })
+
+  it('renders euros in a German locale', () => {
+    setCurrencyFormat({ currency: 'EUR', locale: 'de-DE' })
+    // Symbol after the number, dot as the thousands separator, and a
+    // non-breaking space between them, which is what the locale calls for.
+    expect(formatCurrency(95_000)).toBe('95.000 €')
+    expect(formatCurrency(-1_613)).toBe('-1.613 €')
+  })
+
+  it('renders pounds in a UK locale', () => {
+    setCurrencyFormat({ currency: 'GBP', locale: 'en-GB' })
+    expect(formatCurrency(95_000)).toBe('£95,000')
+  })
+
+  it('uses the right symbol in abbreviated figures', () => {
+    setCurrencyFormat({ currency: 'GBP', locale: 'en-GB' })
+    expect(formatCurrencyCompact(1_710_000)).toBe('£1.71M')
+    expect(formatCurrencyCompact(85_000)).toBe('£85K')
+  })
+
+  it('localises plain counts too', () => {
+    setCurrencyFormat({ currency: 'EUR', locale: 'de-DE' })
+    expect(formatCount(12_500)).toBe('12.500')
+  })
+
+  it('ignores an unusable currency rather than taking the page down', () => {
+    // Intl throws on an unknown code. A bad value in a loaded scenario file
+    // must not blank the interface.
+    setCurrencyFormat({ currency: 'NOTREAL', locale: 'en-US' })
+    expect(getCurrencyFormat().currency).toBe('USD')
+    expect(formatCurrency(95_000)).toBe('$95,000')
+  })
+
+  it('ignores an unusable locale the same way', () => {
+    setCurrencyFormat({ currency: 'USD', locale: 'not a locale' })
+    expect(formatCurrency(95_000)).toBe('$95,000')
+  })
+
+  it('keeps rounding away from zero in every currency', () => {
+    // The symmetry is ours, not the engine's, so it must survive the switch.
+    setCurrencyFormat({ currency: 'GBP', locale: 'en-GB' })
+    expect(formatCurrency(1_612.5)).toBe('£1,613')
+    expect(formatCurrency(-1_612.5)).toBe('-£1,613')
   })
 })

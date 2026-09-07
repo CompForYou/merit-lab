@@ -378,3 +378,83 @@ describe('calculateEmployeeMerit - no rounding', () => {
     expect(r.newSalary).toBeCloseTo(83_544.33, 8)
   })
 })
+
+describe('calculateEmployeeMerit - rounding the new salary', () => {
+  const rounded = (increment: number, overrides: Partial<Employee> = {}, mode: OverMaxMode = 'capAtMax') =>
+    calculateEmployeeMerit(employee(overrides), GRADE, MATRIX, {
+      ...settings(mode),
+      roundingIncrement: increment,
+    })
+
+  it('changes nothing when switched off', () => {
+    // The default. Every figure elsewhere in this suite depends on it.
+    const off = calculateEmployeeMerit(employee(), GRADE, MATRIX, settings())
+    const zero = rounded(0)
+    expect(zero.newSalary).toBe(off.newSalary)
+    expect(zero.increaseAmount).toBe(off.increaseAmount)
+  })
+
+  it('rounds the new salary to the nearest increment', () => {
+    // 81,000 + 2,430 = 83,430 -> nearest 100 is 83,400
+    expect(rounded(100).newSalary).toBe(83_400)
+    // nearest 500 is 83,500
+    expect(rounded(500).newSalary).toBe(83_500)
+    // nearest 1,000 is 83,000
+    expect(rounded(1_000).newSalary).toBe(83_000)
+  })
+
+  it('restates the increase to match the rounded salary', () => {
+    // Every downstream figure is derived from increaseAmount, so it has to move
+    // with the salary or the two disagree.
+    const r = rounded(500)
+    expect(r.increaseAmount).toBe(r.newSalary - r.baseSalary)
+    expect(r.increaseAmount).toBe(2_500)
+  })
+
+  it('never cuts pay, even when rounding down would', () => {
+    // 81,000 + 2,430 = 83,430. Rounding to 100,000 would land on 100,000 up or
+    // 0 down; neither may drop the employee below where they started.
+    const r = rounded(100_000)
+    expect(r.newSalary).toBeGreaterThanOrEqual(81_000)
+    expect(r.increaseAmount).toBeGreaterThanOrEqual(0)
+  })
+
+  it('never rounds up through a maximum the cap was holding', () => {
+    // Base 98,000, Exceeds, capped to exactly 100,000. Rounding to the nearest
+    // 1,000 would leave it there; rounding to 3,000 would push it to 102,000
+    // and quietly undo the cap.
+    const r = rounded(3_000, { baseSalary: 98_000, performanceRating: 'Exceeds' })
+    expect(r.newSalary).toBeLessThanOrEqual(100_000)
+    expect(r.isOverMaximumAfter).toBe(false)
+  })
+
+  it('allows rounding above the maximum when the mode permits it', () => {
+    // In allowOverMax there is no cap to protect, so the salary rounds freely.
+    const r = rounded(
+      1_000,
+      { baseSalary: 98_000, performanceRating: 'Exceeds' },
+      'allowOverMax',
+    )
+    // 98,000 + 3,920 = 101,920 -> nearest 1,000 is 102,000
+    expect(r.newSalary).toBe(102_000)
+    expect(r.isOverMaximumAfter).toBe(true)
+  })
+
+  it('leaves a zero increase at zero', () => {
+    const r = rounded(1_000, { performanceRating: 'Below' })
+    expect(r.increaseAmount).toBe(0)
+    expect(r.newSalary).toBe(81_000)
+  })
+
+  it('leaves an ineligible employee untouched', () => {
+    const r = rounded(1_000, { eligible: false })
+    expect(r.newSalary).toBe(81_000)
+  })
+
+  it('leaves someone already over the maximum alone', () => {
+    // They were never held by the cap, so there is nothing for rounding to
+    // breach, and capAtMax pays them nothing anyway.
+    const r = rounded(1_000, { baseSalary: 105_000, performanceRating: 'Exceeds' })
+    expect(r.newSalary).toBe(105_000)
+  })
+})

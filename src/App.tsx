@@ -26,6 +26,9 @@ import {
   setBandBoundary,
   addRatingRow,
   removeRatingRow,
+  renameRatingRow,
+  splitBand,
+  removeBand,
   scaleMatrix,
 } from './lib/matrix-edit'
 import {
@@ -35,7 +38,12 @@ import {
 } from './lib/scenario-file'
 import { resultsToCsv } from './lib/export-csv'
 import { downloadText, readFileAsText } from './lib/download'
-import { formatCount, formatCurrencyCompact, pluralize } from './lib/format'
+import {
+  formatCount,
+  formatCurrencyCompact,
+  pluralize,
+  setCurrencyFormat,
+} from './lib/format'
 import { SAMPLE_POPULATION } from './data/sample-population'
 import { SAMPLE_GRADES } from './data/sample-structure'
 import { DEFAULT_MERIT_MATRIX, DEFAULT_SETTINGS } from './data/default-matrix'
@@ -100,6 +108,14 @@ export default function App() {
 
   const matrix = plans[activePlan].matrix
   const settings = plans[activePlan].settings
+
+  // Formatting is module state, so it is set before anything renders figures.
+  // Doing it during render rather than in an effect means the first paint after
+  // a currency change is already in the new currency.
+  setCurrencyFormat({
+    currency: settings.currency ?? 'USD',
+    locale: settings.locale ?? 'en-US',
+  })
 
   const updateActivePlan = useCallback(
     (change: (plan: Plan) => Plan) => {
@@ -514,6 +530,15 @@ export default function App() {
               }
               onRemoveRating={(rating) =>
                 setMatrix((current) => removeRatingRow(current, rating))
+              }
+              onRenameRating={(from, to) =>
+                setMatrix((current) => renameRatingRow(current, from, to))
+              }
+              onSplitBand={(index, value) =>
+                setMatrix((current) => splitBand(current, index, value))
+              }
+              onRemoveBand={(index) =>
+                setMatrix((current) => removeBand(current, index))
               }
               hovered={hoveredCell}
               onHoverChange={setHoveredCell}

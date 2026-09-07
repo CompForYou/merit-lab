@@ -189,6 +189,14 @@ export const GLOSSARY = {
       'Rarely shown, and it reverses intuitions. A generous percentage paid to a handful of top performers routinely costs less than a modest one paid to the large middle of the population.',
   },
 
+  rounding: {
+    term: 'Rounding new salaries',
+    definition:
+      'Rounds each new base salary to a whole multiple, the way most plans present increases to managers and payroll.',
+    assumption:
+      'Off by default, because it CHANGES THE COST: rounding two hundred salaries up or down moves the budget. It never cuts pay, and never rounds anyone above a maximum the over-maximum mode is holding, which would quietly undo the cap. Lump sums are left unrounded.',
+  },
+
   'not-costed': {
     term: 'Could not be costed',
     definition:

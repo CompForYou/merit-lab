@@ -220,6 +220,21 @@ export function calculateEmployeeMerit(
       break
   }
 
+  // Rounding is applied last, to the new base salary, because that is the
+  // figure payroll actually pays. It deliberately changes the cost, which is
+  // why it is off unless a user turns it on.
+  //
+  // Two invariants survive it: a merit cycle never cuts pay, and a rounded
+  // salary never breaches a maximum the mode was enforcing. Rounding up through
+  // a cap would quietly undo the very thing the cap is for.
+  increaseAmount = applyRounding(
+    base,
+    increaseAmount,
+    effectiveMax,
+    settings.overMaxMode,
+    settings.roundingIncrement ?? 0,
+  )
+
   const reducedByCap =
     uncappedIncreaseAmount - increaseAmount - lumpSumAmount
   const newSalary = base + increaseAmount
@@ -250,4 +265,38 @@ export function calculateEmployeeMerit(
     wasBelowMinimumBefore: base < effectiveMin,
     isBelowMinimumAfter: newSalary < effectiveMin,
   }
+}
+
+
+/**
+ * Round a new base salary to a whole multiple, without breaking the two rules
+ * that hold everywhere else in this library.
+ *
+ * Returns the adjusted increase rather than the salary, so every figure derived
+ * from it downstream stays consistent.
+ */
+function applyRounding(
+  base: number,
+  increaseAmount: number,
+  effectiveMax: number,
+  overMaxMode: ScenarioSettings['overMaxMode'],
+  increment: number,
+): number {
+  if (!Number.isFinite(increment) || increment <= 0) return increaseAmount
+  if (increaseAmount <= 0) return increaseAmount
+
+  let newSalary = Math.round((base + increaseAmount) / increment) * increment
+
+  // Never cut pay: rounding down past the starting salary would do exactly that.
+  if (newSalary < base) newSalary = base
+
+  // Never round up through a maximum the mode was holding. Someone already above
+  // it is left alone; they were not being held by the cap in the first place.
+  const capped = overMaxMode !== 'allowOverMax'
+  if (capped && base <= effectiveMax && newSalary > effectiveMax) {
+    newSalary = Math.floor(effectiveMax / increment) * increment
+    if (newSalary < base) newSalary = base
+  }
+
+  return newSalary - base
 }

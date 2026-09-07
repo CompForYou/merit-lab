@@ -77,4 +77,8 @@ export const DEFAULT_SETTINGS: ScenarioSettings = {
   prorationEnabled: false,
   meritEffectiveDate: '2025-01-01',
   compressionThreshold: 0.02,
+  // Rounding changes the cost, so it stays off until a user asks for it.
+  roundingIncrement: 0,
+  currency: 'USD',
+  locale: 'en-US',
 }

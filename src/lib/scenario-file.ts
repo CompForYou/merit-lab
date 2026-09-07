@@ -13,8 +13,12 @@ import type {
  * from a newer version is refused rather than half-read: silently ignoring
  * fields it does not understand would load a scenario that is not the one the
  * user saved.
+ *
+ * Version 2 added rounding, currency and locale. A version 1 file still loads:
+ * those fields arrive absent and fall back to defaults that reproduce version 1
+ * behaviour exactly.
  */
-export const SCENARIO_FILE_VERSION = 1
+export const SCENARIO_FILE_VERSION = 2
 
 const FORMAT_TAG = 'merit-lab-scenario'
 
@@ -285,6 +289,11 @@ function readSettings(
     prorationEnabled: value.prorationEnabled === true,
     meritEffectiveDate: str(value.meritEffectiveDate) ?? undefined,
     compressionThreshold: num(value.compressionThreshold) ?? 0.02,
+    // Absent in a version 1 file. Zero means no rounding, which is what a
+    // version 1 scenario did, so an old file reloads to the same figures.
+    roundingIncrement: num(value.roundingIncrement) ?? 0,
+    currency: str(value.currency) ?? 'USD',
+    locale: str(value.locale) ?? 'en-US',
   }
 }
 

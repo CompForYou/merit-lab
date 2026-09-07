@@ -91,6 +91,16 @@ export interface ScenarioSettings {
    * (2 percentage points).
    */
   compressionThreshold: number
+  /**
+   * Round each new base salary to a multiple of this, in whole currency units.
+   * 0 means no rounding, which is the default: rounding CHANGES THE COST, so it
+   * is never applied unless a user asks for it.
+   */
+  roundingIncrement?: number
+  /** ISO 4217 code for display. The maths is unit-agnostic. */
+  currency?: string
+  /** BCP 47 locale for display. */
+  locale?: string
 }
 
 /** Everything needed to reproduce a run. This is what export/import writes. */
