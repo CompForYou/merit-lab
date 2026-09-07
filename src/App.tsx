@@ -13,6 +13,11 @@ import { IssueList } from './components/IssueList'
 import { importEmployeesFromCsv } from './lib/import-employees'
 import { importGradesFromCsv } from './lib/import-grades'
 import { profilePopulation } from './lib/population-profile'
+import {
+  groupResults,
+  availableGroupings,
+  GROUP_BY_GRADE,
+} from './lib/grouping'
 import { runScenario, fitToBudgetFactor } from './lib/run-scenario'
 import {
   setMatrixCell,
@@ -83,6 +88,9 @@ export default function App() {
     bandId: string
   } | null>(null)
   const [dotMode, setDotMode] = useState<DotPlotMode>('single')
+  const [groupBy, setGroupBy] = useState<string>(GROUP_BY_GRADE)
+  const [highlightedGroupKey, setHighlightedGroupKey] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
   const [fileNotes, setFileNotes] = useState<ImportIssue[]>([])
 
   const animationRef = useRef<number | null>(null)
@@ -172,6 +180,82 @@ export default function App() {
   const noMatrixCell = scenario.results.filter(
     (r) => r.exclusionReason === 'no-matrix-cell',
   )
+
+  const groupings = useMemo(() => availableGroupings(employees), [employees])
+
+  // A grouping the user picked can vanish when they paste a different file.
+  const activeGroupBy = groupings.includes(groupBy) ? groupBy : GROUP_BY_GRADE
+
+  const attributeOf = useMemo(() => {
+    const lookup = new Map<string, string>()
+    if (activeGroupBy === GROUP_BY_GRADE) return lookup
+    for (const e of employees) {
+      lookup.set(e.id, e.attributes?.[activeGroupBy] ?? 'Unspecified')
+    }
+    return lookup
+  }, [employees, activeGroupBy])
+
+  const groupRows = useMemo(() => {
+    const gradeName = new Map(grades.map((g) => [g.id, g.name]))
+    return activeGroupBy === GROUP_BY_GRADE
+      ? groupResults(
+          scenario.results,
+          (r) => r.gradeId,
+          (k) => gradeName.get(k) ?? k,
+          settings.targetBudgetPercent,
+        )
+      : groupResults(
+          scenario.results,
+          (r) => attributeOf.get(r.employeeId) ?? 'Unspecified',
+          (k) => k,
+          settings.targetBudgetPercent,
+        )
+  }, [scenario.results, grades, activeGroupBy, attributeOf, settings.targetBudgetPercent])
+
+  /**
+   * Columns whose grouping deserves the pay-equity caution. Matched on name,
+   * because these arrive as free-form headings from whatever system exported
+   * the file.
+   */
+  const isDemographicGrouping = /gender|sex|ethnic|race|disab|age|nationality/i.test(
+    activeGroupBy,
+  )
+
+  /**
+   * The employee the search box has found. Only pins the plot on an unambiguous
+   * match: highlighting one of nine candidates would be a guess.
+   */
+  const searchCandidates = useMemo(() => {
+    const term = search.trim().toLowerCase()
+    if (term === '') return []
+    return employees.filter((e) => e.id.toLowerCase().includes(term))
+  }, [search, employees])
+  const searchMatches = searchCandidates.length
+  const searchMatch = searchMatches === 1 ? searchCandidates[0].id : null
+
+  /**
+   * Who stays lit in the plot. One path for three sources, so they cannot
+   * disagree: a hovered matrix cell, a hovered group row, or a search match.
+   */
+  const highlightedIds = useMemo<ReadonlySet<string> | null>(() => {
+    if (searchMatch) return new Set([searchMatch])
+    if (highlightedGroupKey !== null) {
+      const members = scenario.results.filter((r) =>
+        activeGroupBy === GROUP_BY_GRADE
+          ? r.gradeId === highlightedGroupKey
+          : (attributeOf.get(r.employeeId) ?? 'Unspecified') === highlightedGroupKey,
+      )
+      return new Set(members.map((r) => r.employeeId))
+    }
+    if (hoveredCell) {
+      const members = scenario.results.filter(
+        (r) =>
+          r.performanceRating === hoveredCell.rating && r.bandId === hoveredCell.bandId,
+      )
+      return new Set(members.map((r) => r.employeeId))
+    }
+    return null
+  }, [searchMatch, highlightedGroupKey, hoveredCell, scenario.results, activeGroupBy, attributeOf])
 
   const fitFactor = fitToBudgetFactor(
     scenario.budget.budgetSpendPercent,
@@ -507,6 +591,28 @@ export default function App() {
             </div>
 
             {employees.length > 0 ? (
+              <div className="mt-3">
+                <input
+                  type="search"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Find an employee by id"
+                  aria-label="Find an employee by id"
+                  className="w-full rounded border border-zinc-300 bg-white px-2 py-1 text-xs placeholder:text-zinc-300 focus:border-zinc-500 focus:outline-none"
+                />
+                {search.trim() !== '' ? (
+                  <p className="mt-1 text-[11px] text-zinc-500">
+                    {searchMatch
+                      ? `Showing ${searchMatch} in the plot.`
+                      : `${formatCount(searchMatches)} ${
+                          searchMatches === 1 ? 'match' : 'matches'
+                        } — keep typing to narrow to one.`}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+
+            {employees.length > 0 ? (
               <div className="mt-4 border-t border-zinc-100 pt-3">
                 <RatingBars profile={profile} />
               </div>
@@ -573,6 +679,15 @@ export default function App() {
               hoveredCell={hoveredCell}
               dotMode={dotMode}
               onDotModeChange={setDotMode}
+              highlightedIds={highlightedIds}
+              focusId={searchMatch}
+              groupRows={groupRows}
+              groupings={groupings}
+              groupBy={activeGroupBy}
+              onGroupByChange={setGroupBy}
+              highlightedGroupKey={highlightedGroupKey}
+              onHighlightGroup={setHighlightedGroupKey}
+              isDemographicGrouping={isDemographicGrouping}
               errors={errors}
               warnings={warnings}
             />

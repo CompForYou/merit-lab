@@ -86,3 +86,14 @@ export {
 } from './scenario-file'
 export { resultsToCsv } from './export-csv'
 export { downloadText, readFileAsText } from './download'
+export {
+  groupResults,
+  availableGroupings,
+  widestAverageGap,
+  MIN_GROUP_SIZE,
+  GROUP_BY_GRADE,
+  type GroupRow,
+} from './grouping'
+export { explainDot, type DotExplanation, type DotStatus } from './dot-explain'
+export { layoutDotsByGrade, type DotGradeGroup, type GroupedDotLayout } from './dot-layout'
+export { GLOSSARY, TERM_IDS, lookupTerm, type TermId, type GlossaryEntry } from './glossary'

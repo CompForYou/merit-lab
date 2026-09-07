@@ -6,3 +6,18 @@ html {
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum";
 }
+
+/* Dot plot motion.
+   Only inside a no-preference query, so a reader who has asked their system to
+   reduce motion gets no transition at all rather than a shorter one.
+   The fill is delayed until the movement is nearly over, which is what the spec
+   asks for: a dot that crosses the range maximum turns red AS IT LANDS, not
+   while it is still travelling. */
+@media (prefers-reduced-motion: no-preference) {
+  .dot-move {
+    transition: transform 400ms ease-out;
+  }
+  .dot-fill {
+    transition: fill 180ms ease-out 280ms;
+  }
+}

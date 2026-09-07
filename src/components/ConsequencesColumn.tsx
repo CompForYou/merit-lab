@@ -2,12 +2,14 @@ import { Panel } from './Panel'
 import { Explain } from './Explain'
 import { CostPanel } from './CostPanel'
 import { DotPlot, type DotPlotMode } from './DotPlot'
+import { GroupTable } from './GroupTable'
 import { GradeTable } from './GradeTable'
 import { OutOfRangeList, DistributionShift } from './OutOfRangeList'
 import { CompressionTable, CappedNote } from './CompressionTable'
 import { IssueList } from './IssueList'
 import { formatCount, pluralize } from '../lib/format'
 import type { ScenarioResults } from '../lib/run-scenario'
+import type { GroupRow } from '../lib/grouping'
 import type { PopulationProfile } from '../lib/population-profile'
 import type { ImportIssue } from '../lib/import-employees'
 import type { Grade, MeritMatrix, ScenarioSettings } from '../types/domain'
@@ -26,6 +28,15 @@ export function ConsequencesColumn({
   hoveredCell,
   dotMode,
   onDotModeChange,
+  highlightedIds,
+  focusId,
+  groupRows,
+  groupings,
+  groupBy,
+  onGroupByChange,
+  highlightedGroupKey,
+  onHighlightGroup,
+  isDemographicGrouping,
   errors,
   warnings,
 }: {
@@ -37,6 +48,15 @@ export function ConsequencesColumn({
   hoveredCell: { rating: string; bandId: string } | null
   dotMode: DotPlotMode
   onDotModeChange: (next: DotPlotMode) => void
+  highlightedIds: ReadonlySet<string> | null
+  focusId: string | null
+  groupRows: GroupRow[]
+  groupings: string[]
+  groupBy: string
+  onGroupByChange: (next: string) => void
+  highlightedGroupKey: string | null
+  onHighlightGroup: (key: string | null) => void
+  isDemographicGrouping: boolean
   errors: ImportIssue[]
   warnings: ImportIssue[]
 }) {
@@ -68,7 +88,8 @@ export function ConsequencesColumn({
           results={scenario.results}
           grades={grades}
           matrix={matrix}
-          hovered={hoveredCell}
+          highlightedIds={highlightedIds}
+          focusId={focusId}
           mode={dotMode}
           onModeChange={onDotModeChange}
         />
@@ -92,6 +113,31 @@ export function ConsequencesColumn({
 
       <Panel title="By grade">
         <GradeTable profile={profile} grades={grades} byGrade={scenario.byGrade} />
+      </Panel>
+
+      <Panel
+        title="By group"
+        aside={
+          <select
+            value={groupBy}
+            onChange={(e) => onGroupByChange(e.target.value)}
+            aria-label="Group results by"
+            className="rounded border border-zinc-300 bg-white px-1.5 py-0.5 text-[11px] text-zinc-700 focus:border-zinc-500 focus:outline-none"
+          >
+            {groupings.map((g) => (
+              <option key={g} value={g}>
+                {g === '__grade__' ? 'Grade' : g}
+              </option>
+            ))}
+          </select>
+        }
+      >
+        <GroupTable
+          rows={groupRows}
+          highlightedKey={highlightedGroupKey}
+          onHighlight={onHighlightGroup}
+          isDemographic={isDemographicGrouping}
+        />
       </Panel>
 
       <Panel

@@ -41,14 +41,22 @@ export function DotPlot({
   results,
   grades,
   matrix,
-  hovered,
+  highlightedIds,
+  focusId,
   mode,
   onModeChange,
 }: {
   results: EmployeeMeritResult[]
   grades: Grade[]
   matrix: MeritMatrix
-  hovered: { rating: string; bandId: string } | null
+  /**
+   * Employees to keep lit while everything else dims. Null means no highlight.
+   * Generalised from the matrix-cell hover it started as, so a group row and an
+   * employee search dim the plot through exactly the same path.
+   */
+  highlightedIds: ReadonlySet<string> | null
+  /** Pinned from outside, by the employee search. */
+  focusId: string | null
   mode: DotPlotMode
   onModeChange: (next: DotPlotMode) => void
 }) {
@@ -67,7 +75,7 @@ export function DotPlot({
   )
   const gradeById = useMemo(() => new Map(grades.map((g) => [g.id, g])), [grades])
 
-  const shownId = pinnedId ?? hoveredId
+  const shownId = hoveredId ?? focusId ?? pinnedId
   const detail: DotExplanation | null = useMemo(() => {
     if (!shownId) return null
     const result = resultById.get(shownId)
@@ -107,8 +115,7 @@ export function DotPlot({
   const height = PADDING.top + PADDING.bottom + Math.max(rows, 3 * ROW_HEIGHT)
 
   const isDimmed = (dot: Dot) =>
-    hovered !== null &&
-    !(dot.performanceRating === hovered.rating && dot.bandId === hovered.bandId)
+    highlightedIds !== null && !highlightedIds.has(dot.employeeId)
 
   const dotProps = (dot: Dot, cy: number) => ({
     dot,
@@ -153,6 +160,8 @@ export function DotPlot({
           >
             unpin {pinnedId}
           </button>
+        ) : focusId ? (
+          <span className="text-[11px] text-zinc-500">showing {focusId}</span>
         ) : (
           <span className="text-[11px] text-zinc-300">click a dot to pin it</span>
         )}
@@ -319,14 +328,17 @@ function PlottedDot({
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
       onClick={onSelect}
-      className="cursor-pointer"
+      className="dot-move cursor-pointer"
       transform={`translate(${x}, ${cy})`}
-      style={{ transition: 'transform 400ms ease-out' }}
     >
       {selected ? (
         <circle r={DOT_RADIUS + 3} className="fill-none stroke-zinc-900" strokeWidth={1} />
       ) : null}
-      <circle r={DOT_RADIUS} className={dotColour(dot)} opacity={dimmed ? 0.12 : 1} />
+      <circle
+        r={DOT_RADIUS}
+        className={`dot-fill ${dotColour(dot)}`}
+        opacity={dimmed ? 0.12 : 1}
+      />
       <circle r={HIT_RADIUS} fill="transparent" />
     </g>
   )
