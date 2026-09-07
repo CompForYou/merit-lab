@@ -756,6 +756,29 @@ export default function App() {
           )}
         </div>
       </main>
+
+      {/*
+        The one link a reviewer wants: straight to the arithmetic. The whole
+        credibility argument of this tool is that the maths is readable and
+        tested, which is worth nothing if you cannot find it.
+      */}
+      <footer className="mx-auto max-w-[100rem] border-t border-zinc-200 px-6 py-4">
+        <p className="text-[11px] leading-relaxed text-zinc-400">
+          Merit Lab runs entirely in your browser. No server, no account, no
+          storage — close the tab and it is gone.{' '}
+          <a
+            href="https://github.com/CompForYou/merit-lab"
+            target="_blank"
+            rel="noreferrer"
+            className="text-zinc-500 underline decoration-zinc-300 underline-offset-2 hover:text-zinc-800"
+          >
+            The source is public
+          </a>
+          , and every compensation formula lives in{' '}
+          <code className="text-zinc-500">src/lib/</code> with a unit test and a
+          hand-calculated expected value.
+        </p>
+      </footer>
     </div>
   )
 }
