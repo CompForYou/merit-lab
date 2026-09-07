@@ -1,10 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { layoutDots } from './dot-layout'
+import { layoutDots, layoutDotsByGrade } from './dot-layout'
 import { runScenario } from './run-scenario'
 import { SAMPLE_POPULATION } from '../data/sample-population'
 import { SAMPLE_GRADES } from '../data/sample-structure'
 import { DEFAULT_MERIT_MATRIX, DEFAULT_SETTINGS } from '../data/default-matrix'
 import type { EmployeeMeritResult } from './merit-increase'
+import type { Grade } from '../types/domain'
 
 const result = (o: Partial<EmployeeMeritResult> & { employeeId: string }): EmployeeMeritResult => ({
   gradeId: 'G1',
@@ -192,5 +193,102 @@ describe('layoutDots - the sample population', () => {
   it('keeps the stack shallow enough to draw', () => {
     // 204 dots binned at 0.01 should not pile into an unreadable column.
     expect(layout.maxRow).toBeLessThan(12)
+  })
+})
+
+describe('layoutDotsByGrade - splitting the plot by grade', () => {
+  const GRADES: Grade[] = [
+    { id: 'G1', name: 'Analyst', order: 1, min: 51_000, mid: 60_000, max: 69_000 },
+    { id: 'G2', name: 'Senior', order: 2, min: 80_000, mid: 100_000, max: 120_000 },
+  ]
+
+  const mixed = [
+    result({ employeeId: 'A1', gradeId: 'G1', compaRatio: 0.95, newCompaRatio: 0.97 }),
+    result({ employeeId: 'A2', gradeId: 'G1', compaRatio: 0.95, newCompaRatio: 0.97 }),
+    result({ employeeId: 'B1', gradeId: 'G2', compaRatio: 1.02, newCompaRatio: 1.05 }),
+  ]
+
+  it('returns one group per grade, in declared order', () => {
+    const layout = layoutDotsByGrade(mixed, GRADES)
+    expect(layout.groups.map((g) => g.gradeName)).toEqual(['Analyst', 'Senior'])
+  })
+
+  it('puts each employee in their own grade band', () => {
+    const layout = layoutDotsByGrade(mixed, GRADES)
+    expect(layout.groups[0].dots.map((d) => d.employeeId)).toEqual(['A1', 'A2'])
+    expect(layout.groups[1].dots.map((d) => d.employeeId)).toEqual(['B1'])
+  })
+
+  it('expresses each grade’s own bounds as compa-ratios', () => {
+    // This is the whole point of the grouped view: on a shared axis these two
+    // minimums sit at different compa-ratios, so no single line can show them.
+    const layout = layoutDotsByGrade(mixed, GRADES)
+    expect(layout.groups[0].minCompaRatio).toBeCloseTo(51_000 / 60_000, 10)
+    expect(layout.groups[0].maxCompaRatio).toBeCloseTo(69_000 / 60_000, 10)
+    expect(layout.groups[1].minCompaRatio).toBeCloseTo(80_000 / 100_000, 10)
+    expect(layout.groups[1].maxCompaRatio).toBeCloseTo(120_000 / 100_000, 10)
+    expect(layout.groups[0].minCompaRatio).not.toBeCloseTo(
+      layout.groups[1].minCompaRatio!,
+      3,
+    )
+  })
+
+  it('restacks within each grade so rows start from that grade’s centre', () => {
+    // A1 and A2 share a bin. Alone in their grade they must be rows 0 and 1,
+    // regardless of where they sat among the whole population.
+    const layout = layoutDotsByGrade(mixed, GRADES)
+    expect(layout.groups[0].dots.map((d) => d.row)).toEqual([0, 1])
+    expect(layout.groups[1].dots.map((d) => d.row)).toEqual([0])
+    expect(layout.groups[1].maxRow).toBe(0)
+  })
+
+  it('shares one horizontal domain across every grade', () => {
+    // The rows stack, but the axis is common, so a compa-ratio of 1.00 is in
+    // the same place on every row.
+    const layout = layoutDotsByGrade(mixed, GRADES)
+    const flat = layoutDots(mixed)
+    expect(layout.domain).toEqual(flat.domain)
+  })
+
+  it('returns an empty band for a grade with nobody in it', () => {
+    const layout = layoutDotsByGrade([mixed[0]], GRADES)
+    expect(layout.groups[1].dots).toEqual([])
+    expect(layout.groups[1].maxRow).toBe(0)
+  })
+
+  it('keeps the same employees as the ungrouped layout', () => {
+    const layout = layoutDotsByGrade(mixed, GRADES)
+    const grouped = layout.groups.flatMap((g) => g.dots.map((d) => d.employeeId)).sort()
+    const flat = layoutDots(mixed).dots.map((d) => d.employeeId).sort()
+    expect(grouped).toEqual(flat)
+  })
+
+  it('reports the same omitted count as the ungrouped layout', () => {
+    const withUnplaceable = [
+      ...mixed,
+      result({ employeeId: 'X', gradeId: 'GX', compaRatio: null, newCompaRatio: null, excluded: true }),
+    ]
+    expect(layoutDotsByGrade(withUnplaceable, GRADES).omitted).toBe(1)
+  })
+
+  it('leaves bounds null for a grade with no midpoint', () => {
+    const broken: Grade[] = [{ ...GRADES[0], mid: 0 }]
+    const layout = layoutDotsByGrade(mixed, broken)
+    expect(layout.groups[0].minCompaRatio).toBeNull()
+    expect(layout.groups[0].maxCompaRatio).toBeNull()
+  })
+
+  it('works on the sample population', () => {
+    const scenario = runScenario(
+      SAMPLE_POPULATION, SAMPLE_GRADES, DEFAULT_MERIT_MATRIX, DEFAULT_SETTINGS,
+    )
+    const layout = layoutDotsByGrade(scenario.results, SAMPLE_GRADES)
+    expect(layout.groups).toHaveLength(8)
+    const total = layout.groups.reduce((n, g) => n + g.dots.length, 0)
+    expect(total).toBe(204)
+    // Each grade's minimum sits at a different compa-ratio, because the spread
+    // widens with grade. That is exactly why they cannot share one line.
+    const mins = layout.groups.map((g) => g.minCompaRatio!)
+    expect(new Set(mins.map((m) => m.toFixed(3))).size).toBeGreaterThan(4)
   })
 })

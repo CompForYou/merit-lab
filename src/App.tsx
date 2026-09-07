@@ -5,6 +5,7 @@ import { MeritMatrixGrid } from './components/MeritMatrixGrid'
 import { SettingsPanel } from './components/SettingsPanel'
 import { ScenarioBar } from './components/ScenarioBar'
 import { ConsequencesColumn } from './components/ConsequencesColumn'
+import type { DotPlotMode } from './components/DotPlot'
 import { HeadlineStrip } from './components/HeadlineStrip'
 import { Explain } from './components/Explain'
 import { RatingBars } from './components/RatingBars'
@@ -13,7 +14,6 @@ import { importEmployeesFromCsv } from './lib/import-employees'
 import { importGradesFromCsv } from './lib/import-grades'
 import { profilePopulation } from './lib/population-profile'
 import { runScenario, fitToBudgetFactor } from './lib/run-scenario'
-import { layoutDots } from './lib/dot-layout'
 import {
   setMatrixCell,
   setBandBoundary,
@@ -82,6 +82,7 @@ export default function App() {
     rating: string
     bandId: string
   } | null>(null)
+  const [dotMode, setDotMode] = useState<DotPlotMode>('single')
   const [fileNotes, setFileNotes] = useState<ImportIssue[]>([])
 
   const animationRef = useRef<number | null>(null)
@@ -155,7 +156,6 @@ export default function App() {
     [employees, grades, plans, otherIndex],
   )
 
-  const dotLayout = useMemo(() => layoutDots(scenario.results), [scenario.results])
 
   const errors: ImportIssue[] = [
     ...(structureImport?.errors ?? []),
@@ -570,8 +570,9 @@ export default function App() {
               grades={grades}
               matrix={matrix}
               settings={settings}
-              dotLayout={dotLayout}
               hoveredCell={hoveredCell}
+              dotMode={dotMode}
+              onDotModeChange={setDotMode}
               errors={errors}
               warnings={warnings}
             />

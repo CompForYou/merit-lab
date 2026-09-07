@@ -1,7 +1,7 @@
 import { Panel } from './Panel'
 import { Explain } from './Explain'
 import { CostPanel } from './CostPanel'
-import { DotPlot } from './DotPlot'
+import { DotPlot, type DotPlotMode } from './DotPlot'
 import { GradeTable } from './GradeTable'
 import { OutOfRangeList, DistributionShift } from './OutOfRangeList'
 import { CompressionTable, CappedNote } from './CompressionTable'
@@ -9,7 +9,6 @@ import { IssueList } from './IssueList'
 import { formatCount, pluralize } from '../lib/format'
 import type { ScenarioResults } from '../lib/run-scenario'
 import type { PopulationProfile } from '../lib/population-profile'
-import type { DotLayout } from '../lib/dot-layout'
 import type { ImportIssue } from '../lib/import-employees'
 import type { Grade, MeritMatrix, ScenarioSettings } from '../types/domain'
 
@@ -24,8 +23,9 @@ export function ConsequencesColumn({
   grades,
   matrix,
   settings,
-  dotLayout,
   hoveredCell,
+  dotMode,
+  onDotModeChange,
   errors,
   warnings,
 }: {
@@ -34,8 +34,9 @@ export function ConsequencesColumn({
   grades: Grade[]
   matrix: MeritMatrix
   settings: ScenarioSettings
-  dotLayout: DotLayout
   hoveredCell: { rating: string; bandId: string } | null
+  dotMode: DotPlotMode
+  onDotModeChange: (next: DotPlotMode) => void
   errors: ImportIssue[]
   warnings: ImportIssue[]
 }) {
@@ -63,7 +64,14 @@ export function ConsequencesColumn({
             : 'one dot per employee'
         }
       >
-        <DotPlot layout={dotLayout} bands={matrix.bands} hovered={hoveredCell} />
+        <DotPlot
+          results={scenario.results}
+          grades={grades}
+          matrix={matrix}
+          hovered={hoveredCell}
+          mode={dotMode}
+          onModeChange={onDotModeChange}
+        />
         {profile.unplaceable > 0 ? (
           <p className="mt-2 text-xs text-amber-800">
             {pluralize(profile.unplaceable, 'employee')} could not be placed in a

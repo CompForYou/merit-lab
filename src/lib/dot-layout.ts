@@ -1,4 +1,5 @@
 import type { EmployeeMeritResult } from './merit-increase'
+import type { Grade } from '../types/domain'
 
 /** One employee, as a dot. */
 export interface Dot {
@@ -95,6 +96,92 @@ export function layoutDots(
   })
 
   return { dots, maxRow, domain: computeDomain(dots), omitted }
+}
+
+/** One grade's band of the plot, with its own range bounds in compa-ratio terms. */
+export interface DotGradeGroup {
+  gradeId: string
+  gradeName: string
+  order: number
+  dots: Dot[]
+  /** How far this group's stack reaches from its own centre line. */
+  maxRow: number
+  /**
+   * The grade minimum and maximum expressed as compa-ratios, so they can be
+   * drawn on this row.
+   *
+   * This is the reason the grouped view exists. On one shared axis the range
+   * bounds cannot be drawn at all: a minimum sits at 0.85 compa-ratio in one
+   * grade and 0.76 in another, so there is no single place to put the line.
+   * Split by grade, each row has exactly one answer.
+   */
+  minCompaRatio: number | null
+  maxCompaRatio: number | null
+}
+
+export interface GroupedDotLayout {
+  groups: DotGradeGroup[]
+  domain: [number, number]
+  omitted: number
+}
+
+/**
+ * The same population, split into one band per grade.
+ *
+ * Ungrouped, the vertical axis is a stacking artifact carrying no meaning.
+ * Grouped, it carries the structure, and each grade can show where its own
+ * minimum and maximum fall relative to its own midpoint.
+ */
+export function layoutDotsByGrade(
+  results: EmployeeMeritResult[],
+  grades: Grade[],
+  binWidth: number = DEFAULT_BIN_WIDTH,
+): GroupedDotLayout {
+  const flat = layoutDots(results, binWidth)
+  const gradeOf = new Map(results.map((r) => [r.employeeId, r.gradeId]))
+  const width = binWidth > 0 ? binWidth : DEFAULT_BIN_WIDTH
+
+  const groups = [...grades]
+    .sort((a, b) => a.order - b.order)
+    .map((grade) => {
+      const mine = flat.dots.filter((d) => gradeOf.get(d.employeeId) === grade.id)
+      // Restacked within the group: a dot's row in the shared plot says nothing
+      // about how it should sit among only its own grade.
+      const { dots, maxRow } = restack(mine, width)
+
+      return {
+        gradeId: grade.id,
+        gradeName: grade.name,
+        order: grade.order,
+        dots,
+        maxRow,
+        minCompaRatio: grade.mid > 0 ? grade.min / grade.mid : null,
+        maxCompaRatio: grade.mid > 0 ? grade.max / grade.mid : null,
+      }
+    })
+
+  return { groups, domain: flat.domain, omitted: flat.omitted }
+}
+
+/** Re-run the binning over a subset, so each grade stacks from its own centre. */
+function restack(dots: Dot[], binWidth: number): { dots: Dot[]; maxRow: number } {
+  const counts = new Map<number, number>()
+  let maxRow = 0
+
+  const sorted = [...dots].sort(
+    (a, b) => a.before - b.before || a.employeeId.localeCompare(b.employeeId),
+  )
+
+  const placed = sorted.map((dot) => {
+    const bin = Math.round(dot.before / binWidth)
+    const index = counts.get(bin) ?? 0
+    counts.set(bin, index + 1)
+    const row = symmetricRow(index)
+    if (Math.abs(row) > maxRow) maxRow = Math.abs(row)
+    return { ...dot, row }
+  })
+
+  return { dots: placed, maxRow }
 }
 
 /**
