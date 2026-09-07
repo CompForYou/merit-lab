@@ -9,6 +9,7 @@ import type { DotPlotMode } from './components/DotPlot'
 import { HeadlineStrip } from './components/HeadlineStrip'
 import { Explain } from './components/Explain'
 import { RatingBars } from './components/RatingBars'
+import { GettingStarted } from './components/GettingStarted'
 import { IssueList } from './components/IssueList'
 import { importEmployeesFromCsv } from './lib/import-employees'
 import { importGradesFromCsv } from './lib/import-grades'
@@ -739,7 +740,8 @@ export default function App() {
             />
           ) : (
             <>
-              <EmptyState
+              <GettingStarted
+                onLoadSample={loadSample}
                 hasGrades={grades.length > 0}
                 hasEmployees={employees.length > 0}
               />
@@ -758,25 +760,3 @@ export default function App() {
   )
 }
 
-function EmptyState({
-  hasGrades,
-  hasEmployees,
-}: {
-  hasGrades: boolean
-  hasEmployees: boolean
-}) {
-  let message =
-    'Load the sample population, paste your own data, or load a saved scenario.'
-  if (hasEmployees && !hasGrades) {
-    message =
-      'A population is loaded but there is no salary structure to place it against. Paste a structure on the left.'
-  } else if (hasGrades && !hasEmployees) {
-    message = 'A salary structure is loaded. Paste a population to place against it.'
-  }
-
-  return (
-    <div className="rounded border border-dashed border-zinc-300 px-6 py-12 text-center">
-      <p className="text-sm text-zinc-500">{message}</p>
-    </div>
-  )
-}

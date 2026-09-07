@@ -4,6 +4,13 @@ import { CostPanel } from './CostPanel'
 import { DotPlot, type DotPlotMode } from './DotPlot'
 import { GroupTable } from './GroupTable'
 import { AdvisorPanel } from './AdvisorPanel'
+import {
+  IncreaseDistribution,
+  CostDrivers,
+  MovementSummary,
+  StructureTable,
+  PanelIntro,
+} from './InsightPanels'
 import { GradeTable } from './GradeTable'
 import { OutOfRangeList, DistributionShift } from './OutOfRangeList'
 import { CompressionTable, CappedNote } from './CompressionTable'
@@ -80,10 +87,18 @@ export function ConsequencesColumn({
             : 'nothing to raise'
         }
       >
+        <PanelIntro>
+          Ranked worst first. Each one shows the arithmetic behind it, the cost of
+          the action it suggests, and what this tool cannot see.
+        </PanelIntro>
         <AdvisorPanel findings={findings} />
       </Panel>
 
-      <Panel title="Cost">
+      <Panel title="Cost" aside="what this plan spends">
+        <PanelIntro>
+          Spend is measured on cash, because that is what a budget approves. Base
+          build is the part that carries into next year.
+        </PanelIntro>
         <CostPanel
           budget={scenario.budget}
           overMaxMode={settings.overMaxMode}
@@ -126,6 +141,35 @@ export function ConsequencesColumn({
             meanAfter={scenario.distribution.meanCompaRatioAfter}
           />
         </div>
+      </Panel>
+
+      <Panel title="What the spend achieved" aside="movement, not cost">
+        <PanelIntro>
+          The efficiency question. Two plans costing the same can move a
+          population very differently, depending on where the money went.
+        </PanelIntro>
+        <MovementSummary scenario={scenario} bands={matrix.bands} />
+      </Panel>
+
+      <Panel title="What people actually receive" aside="individual increases">
+        <PanelIntro>
+          A spend percentage is an average and hides its own shape. This is the
+          distribution behind it.
+        </PanelIntro>
+        <IncreaseDistribution scenario={scenario} />
+      </Panel>
+
+      <Panel title="Where the money goes" aside="largest cells first">
+        <PanelIntro>
+          Rarely the cells you would guess. A modest percentage paid to a large
+          population usually outspends a generous one paid to a few.
+        </PanelIntro>
+        <CostDrivers
+          scenario={scenario}
+          bandLabel={(id) =>
+            matrix.bands.find((b) => b.id === id)?.label ?? id
+          }
+        />
       </Panel>
 
       <Panel title="By grade">
@@ -199,6 +243,14 @@ export function ConsequencesColumn({
             budget.
           </p>
         ) : null}
+      </Panel>
+
+      <Panel title="The structure itself" aside="independent of this plan">
+        <PanelIntro>
+          What the ranges look like before any merit is applied, and where each
+          grade sits across the full width of its own range afterwards.
+        </PanelIntro>
+        <StructureTable grades={grades} scenario={scenario} />
       </Panel>
 
       <Panel title="Compression indicator" aside="adjacent grades">

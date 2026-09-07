@@ -110,3 +110,13 @@ export {
   zeroIncreaseEmployees,
   structureHealth,
 } from './remediation'
+export {
+  increaseDistribution,
+  topCostDrivers,
+  bandMovement,
+  costPerCompaRatioPoint,
+  structureRows,
+  type IncreaseBucket,
+  type BandMovement,
+  type GradeStructureRow,
+} from './insights'

@@ -197,6 +197,24 @@ export const GLOSSARY = {
       'Off by default, because it CHANGES THE COST: rounding two hundred salaries up or down moves the budget. It never cuts pay, and never rounds anyone above a maximum the over-maximum mode is holding, which would quietly undo the cap. Lump sums are left unrounded.',
   },
 
+  'cost-per-point': {
+    term: 'Cost per point of movement',
+    definition:
+      'What this plan spends to move the median compa-ratio by 0.01.',
+    formula: 'totalSpend / (medianShift x 100)',
+    assumption:
+      'The efficiency question rather than the cost question. Two plans costing the same can move the median very differently, depending on whether the money went to people low in their ranges or to people already near the top. Reported only when the plan moves the median upward.',
+  },
+
+  'grade-overlap': {
+    term: 'Overlap with the grade below',
+    definition:
+      'How far a grade range reaches back into the range beneath it, as a proportion of its own width.',
+    formula: '(gradeBelowMax - gradeMin) / (gradeMax - gradeMin)',
+    assumption:
+      'Overlapping grades are normal and usually deliberate. A large overlap is worth watching because it means a promotion can move someone into a higher grade without moving their pay, which makes the promotion hard to explain.',
+  },
+
   'not-costed': {
     term: 'Could not be costed',
     definition:
