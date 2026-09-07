@@ -6,10 +6,14 @@ import { PasteArea, ActionButton } from './components/PasteArea'
 import { MeritMatrixGrid } from './components/MeritMatrixGrid'
 import { SettingsPanel } from './components/SettingsPanel'
 import { CostPanel } from './components/CostPanel'
+import { DotPlot } from './components/DotPlot'
+import { OutOfRangeList, DistributionShift } from './components/OutOfRangeList'
+import { CompressionTable, CappedNote } from './components/CompressionTable'
 import { importEmployeesFromCsv } from './lib/import-employees'
 import { importGradesFromCsv } from './lib/import-grades'
 import { profilePopulation } from './lib/population-profile'
 import { runScenario, fitToBudgetFactor } from './lib/run-scenario'
+import { layoutDots } from './lib/dot-layout'
 import {
   setMatrixCell,
   setBandBoundary,
@@ -47,6 +51,10 @@ export default function App() {
   const [matrix, setMatrix] = useState<MeritMatrix>(DEFAULT_MERIT_MATRIX)
   const [settings, setSettings] = useState<ScenarioSettings>(DEFAULT_SETTINGS)
   const [newRating, setNewRating] = useState('')
+  const [hoveredCell, setHoveredCell] = useState<{
+    rating: string
+    bandId: string
+  } | null>(null)
   const animationRef = useRef<number | null>(null)
   const settleRef = useRef<number | null>(null)
 
@@ -101,6 +109,10 @@ export default function App() {
     (r) => r.exclusionReason === 'no-matrix-cell',
   )
   const cappedCount = scenario.results.filter((r) => r.reducedByCap > 0).length
+
+  const dotLayout = useMemo(() => layoutDots(scenario.results), [scenario.results])
+  const overMaximum = scenario.results.filter((r) => r.isOverMaximumAfter)
+  const belowMinimum = scenario.results.filter((r) => r.isBelowMinimumAfter)
 
   const fitFactor = fitToBudgetFactor(
     scenario.budget.budgetSpendPercent,
@@ -203,6 +215,8 @@ export default function App() {
               onRemoveRating={(rating) =>
                 setMatrix((current) => removeRatingRow(current, rating))
               }
+              hovered={hoveredCell}
+              onHoverChange={setHoveredCell}
             />
 
             <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -328,12 +342,80 @@ export default function App() {
                 />
               </Panel>
 
+              <Panel
+                title="Compa-ratio distribution"
+                aside={
+                  hoveredCell
+                    ? `showing ${hoveredCell.rating} · ${
+                        matrix.bands.find((b) => b.id === hoveredCell.bandId)?.label ??
+                        ''
+                      }`
+                    : 'one dot per employee'
+                }
+              >
+                <DotPlot
+                  layout={dotLayout}
+                  bands={matrix.bands}
+                  hovered={hoveredCell}
+                />
+                <div className="mt-4 border-t border-zinc-100 pt-4">
+                  <DistributionShift
+                    medianBefore={scenario.distribution.medianCompaRatioBefore}
+                    medianAfter={scenario.distribution.medianCompaRatioAfter}
+                    meanBefore={scenario.distribution.meanCompaRatioBefore}
+                    meanAfter={scenario.distribution.meanCompaRatioAfter}
+                  />
+                </div>
+              </Panel>
+
               <Panel title="By grade">
                 <GradeTable
                   profile={profile}
                   grades={grades}
                   byGrade={scenario.byGrade}
                 />
+              </Panel>
+
+              <Panel
+                title="Above the maximum"
+                aside={
+                  scenario.distribution.countCrossedMaximum > 0
+                    ? `${formatCount(scenario.distribution.countCrossedMaximum)} crossed this cycle`
+                    : 'none crossed this cycle'
+                }
+              >
+                <OutOfRangeList
+                  title="finish above their range maximum"
+                  results={overMaximum}
+                  grades={grades}
+                  emptyMessage="Nobody finishes above their range maximum."
+                  tone="over"
+                />
+                <CappedNote
+                  reducedByCap={scenario.budget.reducedByCap}
+                  cappedCount={cappedCount}
+                />
+              </Panel>
+
+              <Panel title="Below the minimum" aside="green-circled">
+                <OutOfRangeList
+                  title="remain below their range minimum"
+                  results={belowMinimum}
+                  grades={grades}
+                  emptyMessage="Nobody remains below their range minimum."
+                  tone="under"
+                />
+                {belowMinimum.length > 0 ? (
+                  <p className="mt-2 text-[11px] leading-relaxed text-zinc-500">
+                    A merit matrix does not clear green-circling. Moving these
+                    employees into range needs a separate adjustment, costed outside
+                    the merit budget.
+                  </p>
+                ) : null}
+              </Panel>
+
+              <Panel title="Compression indicator" aside="adjacent grades">
+                <CompressionTable pairs={scenario.compression} />
               </Panel>
 
               <Panel title="Population profile" aside="before the cycle">

@@ -75,3 +75,4 @@ export {
   fitToBudgetFactor,
   type ScenarioResults,
 } from './run-scenario'
+export { layoutDots, DEFAULT_BIN_WIDTH, type Dot, type DotLayout } from './dot-layout'

@@ -31,17 +31,18 @@ export function MeritMatrixGrid({
   onCellChange,
   onBoundaryChange,
   onRemoveRating,
+  hovered,
+  onHoverChange,
 }: {
   matrix: MeritMatrix
   totals: MatrixCellTotals
   onCellChange: (rating: string, bandId: string, percent: number) => void
   onBoundaryChange: (boundaryIndex: number, value: number) => void
   onRemoveRating: (rating: string) => void
+  /** Lifted so the dot plot can dim everyone outside the hovered cell. */
+  hovered: { rating: string; bandId: string } | null
+  onHoverChange: (next: { rating: string; bandId: string } | null) => void
 }) {
-  const [hovered, setHovered] = useState<{ rating: string; bandId: string } | null>(
-    null,
-  )
-
   const hoveredCell = hovered
     ? findCell(totals, hovered.rating, hovered.bandId)
     : undefined
@@ -101,8 +102,8 @@ export function MeritMatrixGrid({
                   return (
                     <td
                       key={band.id}
-                      onMouseEnter={() => setHovered({ rating, bandId: band.id })}
-                      onMouseLeave={() => setHovered(null)}
+                      onMouseEnter={() => onHoverChange({ rating, bandId: band.id })}
+                      onMouseLeave={() => onHoverChange(null)}
                       className={`border-l border-zinc-100 px-1 py-1 align-top ${
                         isHovered ? 'bg-zinc-100' : ''
                       }`}
