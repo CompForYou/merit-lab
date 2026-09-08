@@ -195,3 +195,70 @@ describe('resultsToCsv - the sample population', () => {
     expect(total).toBeCloseTo(scenario.budget.totalSpend, 6)
   })
 })
+
+describe('resultsToCsv - what produced these results', () => {
+  const employees: Employee[] = [
+    { id: 'E1', gradeId: 'G1', baseSalary: 81_000, performanceRating: 'Meets', fte: 1, eligible: true },
+    { id: 'E2', gradeId: 'G1', baseSalary: 95_000, performanceRating: 'Exceeds', fte: 1, eligible: true },
+  ]
+  const scenario = runScenario(employees, [GRADE], DEFAULT_MERIT_MATRIX, DEFAULT_SETTINGS)
+
+  const withContext = resultsToCsv(scenario.results, employees, [GRADE], {
+    planName: 'FY26 Plan A',
+    settings: { ...DEFAULT_SETTINGS, roundingIncrement: 500, currency: 'GBP' },
+    exportedAt: new Date('2026-03-15T09:30:00.000Z'),
+  })
+
+  it('records the settings that produced the file', () => {
+    // A results file that cannot say what made it cannot be reproduced, and a
+    // number nobody can reproduce cannot be audited.
+    const header = cells(lines(withContext)[0])
+    expect(header).toContain('plan_name')
+    expect(header).toContain('target_budget_percent')
+    expect(header).toContain('over_max_mode')
+    expect(header).toContain('rounding_increment')
+    expect(header).toContain('exported_at')
+  })
+
+  it('repeats them on every row, keeping the file a plain rectangle', () => {
+    // A header block above the data would break every naive parser. Constant
+    // columns are how an audit export normally looks.
+    const rows = lines(withContext)
+    const width = cells(rows[0]).length
+    for (const row of rows) expect(cells(row)).toHaveLength(width)
+
+    const planAt = cells(rows[0]).indexOf('plan_name')
+    expect(cells(rows[1])[planAt]).toBe('FY26 Plan A')
+    expect(cells(rows[2])[planAt]).toBe('FY26 Plan A')
+  })
+
+  it('records the settings that change the arithmetic', () => {
+    const header = cells(lines(withContext)[0])
+    const row = cells(lines(withContext)[1])
+    expect(row[header.indexOf('over_max_mode')]).toBe(DEFAULT_SETTINGS.overMaxMode)
+    expect(row[header.indexOf('rounding_increment')]).toBe('500')
+    expect(row[header.indexOf('currency')]).toBe('GBP')
+    expect(row[header.indexOf('exported_at')]).toBe('2026-03-15T09:30:00.000Z')
+  })
+
+  it('reconstructs the matrix from the per-row columns', () => {
+    // No separate matrix section is needed: rating, band and matrix_percent on
+    // each row rebuild every cell that costed anybody.
+    const header = cells(lines(withContext)[0])
+    const ratingAt = header.indexOf('performance_rating')
+    const bandAt = header.indexOf('compa_ratio_band')
+    const percentAt = header.indexOf('matrix_percent')
+
+    for (const line of lines(withContext).slice(1)) {
+      const row = cells(line)
+      const expected = DEFAULT_MERIT_MATRIX.cells[row[ratingAt]]?.[row[bandAt]]
+      expect(Number(row[percentAt])).toBe(expected)
+    }
+  })
+
+  it('leaves the file unchanged when no context is given', () => {
+    // The argument is optional, so every existing caller keeps its old output.
+    const bare = resultsToCsv(scenario.results, employees, [GRADE])
+    expect(cells(lines(bare)[0])).not.toContain('plan_name')
+  })
+})

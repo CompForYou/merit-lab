@@ -187,3 +187,68 @@ silently missing.
 **Delete a rating row.** 84 employees are immediately reported as carrying a rating with
 no row in the matrix and not costed — rather than quietly vanishing from the budget and
 making the plan look cheaper.
+
+---
+
+## Defending it
+
+Three panels sit collapsed with their finding in the summary line, so a panel with
+nothing to say costs nothing to skip. Open all three.
+
+### What another budget would look like
+
+| Budget | Cost | Matrix | Median | Below min |
+|---|---|---|---|---|
+| 2.25% | $367K | ×0.672 | +2.4 | 7 |
+| 3.00% | $489K | ×0.895 | +3.1 | 4 |
+| **3.25%** | **$530K** | **×0.970** | **+3.4** | **4** |
+| 3.75% | $611K | ×1.119 | +3.9 | 3 |
+
+Every row rescales the same matrix, so the shape of the plan survives and only its size
+moves. The 3.25% row is the fitted plan from step 7, reached in one click rather than six.
+
+Note the last column: cutting to 2.25% leaves **seven** people below their range minimum
+instead of four. A budget cut is not only a smaller number.
+
+### Where the order reverses
+
+> **7 employees receive less money than somebody in the same grade with a worse rating.**
+>
+> EMP-0198 · Strong — **$571 less**
+> 2.5% of $184,500 = $4,613 · versus · EMP-0199 (Meets) 3.5% of $148,100 = $5,184
+
+Two causes, both visible in the list. This one is arithmetic: a Strong employee high in
+their range draws a smaller percentage, and a smaller percentage of a much larger salary
+is less cash. The others are the cap — EMP-0031 is red-circled and receives nothing while
+a Meets colleague receives $1,883.
+
+Neither is necessarily wrong. Both are what the manager will ask about.
+
+### Who rated generously
+
+| Grade | People | Exceeds | Strong | Top box |
+|---|---|---|---|---|
+| Grade 6 | 20 | 40% | 35% | **75% (+23)** |
+| Grade 5 | 24 | 38% | 29% | 67% (+15) |
+| Grade 3 | 36 | 22% | 19% | 42% (−10) |
+| **Company** | **204** | **23%** | **29%** | **52%** |
+
+Grade 6 rated three quarters of its people in the top two boxes against a company 52%.
+The matrix pays on the rating, so that is a real cost difference and a calibration
+conversation.
+
+Underneath, the tool checks whether the good ratings are landing on the already
+well-paid: here 0.98 against 0.99, close enough that ratings are not tracking pay
+position. In a population where they were, the two dimensions of your matrix would be
+fighting each other.
+
+## Hand it to somebody
+
+Click **One-page brief**. You get a standalone HTML file — headline figures, the matrix
+that produced them, what it did to the population, the ranked findings with their
+arithmetic and their costs, and the sensitivity table. It opens in any browser and prints
+to PDF from the browser's own dialogue.
+
+Click **Export results** for the rows instead. Every intermediate value is there, and so
+are the settings that produced them, so somebody can reproduce the file rather than take
+it on trust.

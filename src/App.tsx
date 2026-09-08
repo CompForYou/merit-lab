@@ -50,6 +50,7 @@ import {
   scenarioFileName,
 } from './lib/scenario-file'
 import { resultsToCsv } from './lib/export-csv'
+import { planBriefHtml, briefFileName } from './lib/plan-brief'
 import { downloadText, readFileAsText } from './lib/download'
 import {
   formatCount,
@@ -571,9 +572,41 @@ export default function App() {
   }
 
   const exportCsv = () => {
-    const csv = resultsToCsv(scenario.results, employees, grades)
-    const stamp = new Date().toISOString().slice(0, 10)
-    downloadText(`merit-lab-results-${stamp}.csv`, csv, 'text/csv')
+    const now = new Date()
+    // The settings ride out with the rows. A results file that cannot say what
+    // produced it cannot be reproduced, and audit is half of why it exists.
+    const csv = resultsToCsv(scenario.results, employees, grades, {
+      planName: plans[activePlan].name,
+      settings,
+      exportedAt: now,
+    })
+    downloadText(
+      `merit-lab-results-${now.toISOString().slice(0, 10)}.csv`,
+      csv,
+      'text/csv',
+    )
+  }
+
+  /**
+   * The one-page brief: conclusions rather than rows.
+   *
+   * Until this existed, the only way to show somebody what the tool concluded
+   * was a screenshot — at exactly the moment the work was supposed to pay off.
+   */
+  const exportBrief = () => {
+    const now = new Date()
+    const html = planBriefHtml({
+      planName: plans[activePlan].name,
+      scenario,
+      grades,
+      matrix,
+      settings,
+      findings,
+      inversions,
+      sensitivity,
+      generatedAt: now,
+    })
+    downloadText(briefFileName(plans[activePlan].name, now), html, 'text/html')
   }
 
   const importScenario = async (file: File) => {
@@ -679,6 +712,7 @@ export default function App() {
               }
               onExportScenario={exportScenario}
               onExportCsv={exportCsv}
+            onExportBrief={exportBrief}
               onImportScenario={importScenario}
               canExport={hasData}
             />

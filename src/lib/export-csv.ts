@@ -1,5 +1,23 @@
-import type { Employee, Grade } from '../types/domain'
+import type { Employee, Grade, ScenarioSettings } from '../types/domain'
 import type { EmployeeMeritResult } from './merit-increase'
+
+/**
+ * What produced these results, carried on every row.
+ *
+ * Constant across the file, and repeated anyway. A results file that does not
+ * say what settings made it cannot be reproduced, and a number nobody can
+ * reproduce cannot be audited — which is half the reason the export exists.
+ * Repeating them per row keeps the file a plain rectangle that every tool
+ * reads, rather than a header block that breaks naive parsers.
+ *
+ * The matrix itself needs no separate section: performance_rating, band and
+ * matrix_percent on each row reconstruct every cell that costed anybody.
+ */
+export interface ExportContext {
+  planName: string
+  settings: ScenarioSettings
+  exportedAt: Date
+}
 
 /**
  * Per-employee results as CSV, for taking into a spreadsheet.
@@ -17,6 +35,7 @@ export function resultsToCsv(
   results: EmployeeMeritResult[],
   employees: Employee[],
   grades: Grade[],
+  context?: ExportContext,
 ): string {
   const employeeById = new Map(employees.map((e) => [e.id, e]))
   const gradeById = new Map(grades.map((g) => [g.id, g]))
@@ -54,6 +73,7 @@ export function resultsToCsv(
     'is_below_minimum',
     'not_costed_reason',
     ...attributeNames,
+    ...(context ? CONTEXT_COLUMNS : []),
   ]
 
   const rows = results.map((r) => {
@@ -89,10 +109,36 @@ export function resultsToCsv(
       r.isBelowMinimumAfter ? 'Y' : 'N',
       r.exclusionReason ?? '',
       ...attributeNames.map((name) => employee?.attributes?.[name] ?? ''),
+      ...(context ? contextCells(context) : []),
     ]
   })
 
   return [header, ...rows].map((row) => row.map(escapeCell).join(',')).join('\r\n')
+}
+
+const CONTEXT_COLUMNS = [
+  'plan_name',
+  'target_budget_percent',
+  'over_max_mode',
+  'proration_enabled',
+  'merit_effective_date',
+  'rounding_increment',
+  'currency',
+  'exported_at',
+]
+
+function contextCells(context: ExportContext): (string | number)[] {
+  const { settings } = context
+  return [
+    context.planName,
+    settings.targetBudgetPercent,
+    settings.overMaxMode,
+    settings.prorationEnabled ? 'Y' : 'N',
+    settings.meritEffectiveDate ?? '',
+    settings.roundingIncrement ?? 0,
+    settings.currency ?? 'USD',
+    context.exportedAt.toISOString(),
+  ]
 }
 
 /**

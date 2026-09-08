@@ -89,13 +89,56 @@ unit test with a hand-calculated expected value.
 | `advisor.ts` | Ranked findings, each with its arithmetic and its cost |
 | `column-mapping.ts` | Which column is which, and whether the data underneath agrees |
 | `session-memory.ts` | What is kept between visits, and the guard that keeps pay out of it |
+| `sensitivity.ts` | The same plan rescaled onto other budgets, and where a target is unreachable |
+| `inversions.ts` | Where a better rating received fewer dollars |
+| `rating-governance.ts` | Rating distribution by group against the company |
+| `plan-brief.ts` | The one-page brief, as a standalone document |
 
-**615 tests.** The deployment runs them before publishing, so a broken formula cannot
+**694 tests.** The deployment runs them before publishing, so a broken formula cannot
 reach the live URL.
 
 If you want to check whether this tool knows what it is doing, read
 [`src/lib/compa-ratio.ts`](src/lib/compa-ratio.ts) and its test. That is the fastest way
 to find out.
+
+## Defending the plan
+
+Designing the matrix takes an afternoon. Defending it takes six weeks and a dozen
+meetings, and that is where the questions arrive live, with people waiting:
+
+**"What does 3.0% look like? We're deciding today."** One table, one row per candidate
+budget, each rescaling your matrix and costing the whole population against it — with
+what it does to the median, who gets capped, and who is still below their minimum. Where
+a target cannot be reached at all, it says so: under capping the population physically
+cannot absorb more money, and a plan that silently misses its target looks like a tool
+that does not work.
+
+**"My top performer got $2,100 and the guy who coasts got $2,800."** A matrix pays a
+percentage, and a percentage of a larger salary is more money — so within a grade it can
+reverse the order the ratings intended. In the sample population, a Strong employee at
+$184,500 receives $571 less than a Meets employee at $148,100. Nobody builds this pivot,
+because nobody suspects it is there; every manager notices it. Part-time employees are
+left out, and the count said: they receive a share of a full increase, so the comparison
+is not like for like.
+
+**"Why is this team's spend so high?"** Rating distribution by group against the company
+figure, so a department calling 40% of its people top-box against a company 23% is
+visible before somebody else finds it. Groups under five people show counts but not
+shares. It describes what managers did; it is not evidence anybody did anything wrong.
+
+## Getting the thinking out
+
+A results CSV carries every intermediate value **and the settings that produced it** —
+plan name, target, over-maximum mode, proration, rounding, currency, timestamp — repeated
+on every row so the file stays a plain rectangle any tool reads. Rating, band and matrix
+percentage per row rebuild the matrix itself. A file nobody can reproduce cannot be
+audited, and audit is half of why the export exists.
+
+**One-page brief** produces a standalone HTML document: the headline figures, the matrix,
+what it does to the population, the ranked findings with their arithmetic and their costs,
+and the budget sensitivity table. It opens in any browser and prints straight to PDF.
+Before it existed, the only way to show a colleague what this tool concluded was a
+screenshot — at exactly the moment the work was supposed to pay off.
 
 ## Decisions worth knowing about
 

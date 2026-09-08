@@ -28,6 +28,7 @@ export function ScenarioBar({
   onCopyToOther,
   onExportScenario,
   onExportCsv,
+  onExportBrief,
   onImportScenario,
   canExport,
 }: {
@@ -38,6 +39,7 @@ export function ScenarioBar({
   onCopyToOther: () => void
   onExportScenario: () => void
   onExportCsv: () => void
+  onExportBrief: () => void
   onImportScenario: (file: File) => void
   canExport: boolean
 }) {
@@ -132,6 +134,9 @@ export function ScenarioBar({
         </ActionButton>
         <ActionButton onClick={onExportCsv} disabled={!canExport}>
           Export results
+        </ActionButton>
+        <ActionButton onClick={onExportBrief} disabled={!canExport}>
+          One-page brief
         </ActionButton>
         <ActionButton onClick={() => fileRef.current?.click()}>
           Load scenario
