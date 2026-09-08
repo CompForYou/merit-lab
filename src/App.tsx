@@ -30,6 +30,9 @@ import {
 } from './lib/grouping'
 import { runScenario, fitToBudgetFactor } from './lib/run-scenario'
 import { adviseOnScenario } from './lib/advisor'
+import { budgetSensitivity, defaultSensitivityTargets } from './lib/sensitivity'
+import { findInversions } from './lib/inversions'
+import { ratingGovernance, topBoxPayPosition } from './lib/rating-governance'
 import { compareOverMaxModes } from './lib/remediation'
 import {
   setMatrixCell,
@@ -391,6 +394,52 @@ export default function App() {
     }
     return null
   }, [searchMatch, highlightedGroupKey, hoveredCell, scenario.results, activeGroupBy, attributeOf])
+
+  /**
+   * The three "defend it in the room" answers.
+   *
+   * Sensitivity runs the whole population once per candidate budget, so it is
+   * six full scenario runs. On a two-hundred-employee population that is a few
+   * tens of thousands of multiplications and still imperceptible, but it is
+   * gated on `hasData` so it never runs against an empty population.
+   */
+  const sensitivity = useMemo(() => {
+    if (!hasData) return []
+    return budgetSensitivity(
+      employees,
+      grades,
+      matrix,
+      settings,
+      defaultSensitivityTargets(settings.targetBudgetPercent),
+    )
+  }, [hasData, employees, grades, matrix, settings])
+
+  const inversions = useMemo(
+    () => findInversions(scenario.results, matrix.ratings),
+    [scenario.results, matrix.ratings],
+  )
+
+  const ratingReport = useMemo(() => {
+    const gradeName = new Map(grades.map((g) => [g.id, g.name]))
+    return activeGroupBy === GROUP_BY_GRADE
+      ? ratingGovernance(
+          scenario.results,
+          (r) => r.gradeId,
+          (k) => gradeName.get(k) ?? k,
+          matrix.ratings,
+        )
+      : ratingGovernance(
+          scenario.results,
+          (r) => attributeOf.get(r.employeeId) ?? 'Unspecified',
+          (k) => k,
+          matrix.ratings,
+        )
+  }, [scenario.results, grades, matrix.ratings, activeGroupBy, attributeOf])
+
+  const payPosition = useMemo(
+    () => topBoxPayPosition(scenario.results, matrix.ratings),
+    [scenario.results, matrix.ratings],
+  )
 
   const findings = useMemo(() => {
     if (!hasData) return []
@@ -881,6 +930,10 @@ export default function App() {
               onHighlightGroup={setHighlightedGroupKey}
               isDemographicGrouping={isDemographicGrouping}
               findings={findings}
+              sensitivity={sensitivity}
+              inversions={inversions}
+              ratingReport={ratingReport}
+              payPosition={payPosition}
               errors={errors}
               warnings={warnings}
             />

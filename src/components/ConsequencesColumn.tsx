@@ -1,5 +1,13 @@
-import { Panel } from './Panel'
+import { Panel, CollapsiblePanel } from './Panel'
 import { Explain } from './Explain'
+import {
+  SensitivityTable,
+  InversionList,
+  RatingGovernanceTable,
+} from './DefencePanels'
+import type { SensitivityRow } from '../lib/sensitivity'
+import type { InversionSummary } from '../lib/inversions'
+import type { RatingGovernance } from '../lib/rating-governance'
 import { CostPanel } from './CostPanel'
 import { DotPlot, type DotPlotMode } from './DotPlot'
 import { GroupTable } from './GroupTable'
@@ -47,6 +55,10 @@ export function ConsequencesColumn({
   onHighlightGroup,
   isDemographicGrouping,
   findings,
+  sensitivity,
+  inversions,
+  ratingReport,
+  payPosition,
   errors,
   warnings,
 }: {
@@ -68,6 +80,10 @@ export function ConsequencesColumn({
   onHighlightGroup: (key: string | null) => void
   isDemographicGrouping: boolean
   findings: Finding[]
+  sensitivity: SensitivityRow[]
+  inversions: InversionSummary
+  ratingReport: RatingGovernance
+  payPosition: { topBoxMedian: number | null; othersMedian: number | null; gap: number | null }
   errors: ImportIssue[]
   warnings: ImportIssue[]
 }) {
@@ -105,6 +121,22 @@ export function ConsequencesColumn({
           cappedCount={cappedCount}
         />
       </Panel>
+
+      {/* Collapsed by default, with the answer in the summary line. These are
+          the questions asked in a meeting rather than during design, and a
+          panel that has nothing to report should cost nothing to skip. */}
+      <CollapsiblePanel
+        title="What another budget would look like"
+        collapsed
+        summary={sensitivitySummary(sensitivity)}
+      >
+        <PanelIntro>
+          Every row rescales this matrix onto that budget and costs the whole
+          population against it. The question a budget conversation actually
+          asks, answered before it is asked.
+        </PanelIntro>
+        <SensitivityTable rows={sensitivity} currentTarget={settings.targetBudgetPercent} />
+      </CollapsiblePanel>
 
       <Panel
         title="Compa-ratio distribution"
@@ -159,6 +191,22 @@ export function ConsequencesColumn({
         <IncreaseDistribution scenario={scenario} />
       </Panel>
 
+      <CollapsiblePanel
+        title="Where the order reverses"
+        collapsed
+        summary={
+          inversions.affectedCount === 0
+            ? 'nobody out-earned by a worse rating'
+            : `${formatCount(inversions.affectedCount)} out-earned by a worse rating`
+        }
+      >
+        <PanelIntro>
+          A percentage of a larger salary is more money, so a matrix can hand a
+          top performer less cash than an average colleague in the same grade.
+        </PanelIntro>
+        <InversionList summary={inversions} />
+      </CollapsiblePanel>
+
       <Panel title="Where the money goes" aside="largest cells first">
         <PanelIntro>
           Rarely the cells you would guess. A modest percentage paid to a large
@@ -200,6 +248,22 @@ export function ConsequencesColumn({
           isDemographic={isDemographicGrouping}
         />
       </Panel>
+
+      <CollapsiblePanel
+        title="Who rated generously"
+        collapsed
+        summary={governanceSummary(ratingReport)}
+      >
+        <PanelIntro>
+          Rating distribution by the same grouping, against the company figure.
+          The matrix pays on the rating, so an outlier here moves real money.
+        </PanelIntro>
+        <RatingGovernanceTable
+          report={ratingReport}
+          payPosition={payPosition}
+          groupLabel={groupBy === '__grade__' ? 'Grade' : groupBy}
+        />
+      </CollapsiblePanel>
 
       <Panel
         title="Above the maximum"
@@ -266,3 +330,34 @@ export function ConsequencesColumn({
   )
 }
 
+
+/**
+ * The sensitivity panel's one-line summary.
+ *
+ * Names the range covered, and says up front if any of it is out of reach —
+ * that is the finding, and it should not require opening the panel to see.
+ */
+function sensitivitySummary(rows: SensitivityRow[]): string {
+  if (rows.length === 0) return 'nothing to cost'
+  const low = rows[0].targetPercent
+  const high = rows[rows.length - 1].targetPercent
+  const unreachable = rows.filter((r) => !r.reachable).length
+  const range = `${(low * 100).toFixed(2)}% to ${(high * 100).toFixed(2)}% costed`
+  return unreachable > 0 ? `${range} · ${unreachable} out of reach` : range
+}
+
+/** The governance panel's summary: the widest gap, which is the reason to open it. */
+function governanceSummary(report: RatingGovernance): string {
+  const reported = report.rows.filter((r) => r.topBoxGap !== null)
+  if (reported.length === 0) return 'not enough in any group to compare'
+
+  const widest = reported.reduce((worst, row) =>
+    Math.abs(row.topBoxGap!) > Math.abs(worst.topBoxGap!) ? row : worst,
+  )
+  const points = Math.round(Math.abs(widest.topBoxGap!) * 100)
+  if (points < 5) return 'every group within 5 points of the company'
+
+  return `${widest.label} ${widest.topBoxGap! > 0 ? 'is' : 'is'} ${points} points ${
+    widest.topBoxGap! > 0 ? 'above' : 'below'
+  } the company`
+}
