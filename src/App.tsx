@@ -13,6 +13,15 @@ import { GettingStarted } from './components/GettingStarted'
 import { IssueList } from './components/IssueList'
 import { importEmployeesFromCsv } from './lib/import-employees'
 import { importGradesFromCsv } from './lib/import-grades'
+import { ColumnMapper } from './components/ColumnMapper'
+import { parseDelimitedText } from './lib/csv'
+import { proposeMapping, type ColumnMapping } from './lib/column-mapping'
+import {
+  browserStore,
+  loadDesign,
+  saveDesign,
+  clearDesign,
+} from './lib/session-memory'
 import { profilePopulation } from './lib/population-profile'
 import {
   groupResults,
@@ -103,6 +112,19 @@ export default function App() {
   const [highlightedGroupKey, setHighlightedGroupKey] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [fileNotes, setFileNotes] = useState<ImportIssue[]>([])
+  /**
+   * Column mappings the user set by hand, keyed by the header row they were
+   * made for. Keyed rather than singular so that pasting a second file does not
+   * inherit a mapping made for the first — a column index means nothing once
+   * the columns change — and so the same export maps itself next cycle.
+   */
+  const [mappings, setMappings] = useState<Record<string, ColumnMapping>>({})
+  const [restored, setRestored] = useState(false)
+  /** False until the remembered design has been read, so the save below cannot pre-empt it. */
+  const [hydrated, setHydrated] = useState(false)
+
+  /** Null in a private window or wherever site data is blocked. Everything degrades quietly. */
+  const store = useMemo(() => browserStore(), [])
 
   const animationRef = useRef<number | null>(null)
   const settleRef = useRef<number | null>(null)
@@ -117,6 +139,78 @@ export default function App() {
     currency: settings.currency ?? 'USD',
     locale: settings.locale ?? 'en-US',
   })
+
+  /**
+   * Bring back the plan design from last time, once, on open.
+   *
+   * The population is deliberately not restored and never was stored. Somebody
+   * returning to the tool re-pastes their file, which they still have, and finds
+   * the matrix they spent an afternoon on already in place.
+   */
+  useEffect(() => {
+    const remembered = loadDesign(store)
+    if (remembered) {
+      setPlans([remembered.plans[0], remembered.plans[1]])
+      setActivePlan(remembered.activePlan)
+      setMappings(remembered.mappings)
+      setRestored(true)
+    }
+    setHydrated(true)
+  }, [store])
+
+  /**
+   * True while nothing has been changed from the state the tool opens in.
+   *
+   * Reference equality is enough: `newPlan` hands out the same two frozen
+   * constants, and every edit builds a new object. It means a visitor who opens
+   * the tool, looks around and leaves has had nothing written to their device at
+   * all, and it makes "Forget it" honest — otherwise the save below fires on the
+   * next render and puts a default design straight back.
+   */
+  const designIsPristine =
+    Object.keys(mappings).length === 0 &&
+    plans[0].name === 'Plan A' &&
+    plans[1].name === 'Plan B' &&
+    plans.every(
+      (p) => p.matrix === DEFAULT_MERIT_MATRIX && p.settings === DEFAULT_SETTINGS,
+    )
+
+  /**
+   * Written on every design change, but never before the restore above has run.
+   *
+   * Without that gate the two effects race on first render: this one fires with
+   * the default matrix still in state and overwrites the design that was about
+   * to be restored. The symptom is a tool that silently forgets your work every
+   * time you open it, which is worse than not remembering at all.
+   *
+   * It is a few kilobytes of percentages, so there is nothing to debounce.
+   */
+  useEffect(() => {
+    if (!hydrated) return
+    if (designIsPristine) {
+      clearDesign(store)
+      return
+    }
+    saveDesign(
+      {
+        plans: [
+          { name: plans[0].name, matrix: plans[0].matrix, settings: plans[0].settings },
+          { name: plans[1].name, matrix: plans[1].matrix, settings: plans[1].settings },
+        ],
+        activePlan,
+        mappings,
+      },
+      store,
+    )
+  }, [hydrated, designIsPristine, plans, activePlan, mappings, store])
+
+  const forgetDesign = useCallback(() => {
+    clearDesign(store)
+    setPlans([newPlan('Plan A'), newPlan('Plan B')])
+    setActivePlan(0)
+    setMappings({})
+    setRestored(false)
+  }, [store])
 
   const updateActivePlan = useCallback(
     (change: (plan: Plan) => Plan) => {
@@ -147,14 +241,36 @@ export default function App() {
       ? structureImport.grades
       : (loaded?.grades ?? [])
 
+  // Parsed once and shared, because the mapper needs the same rows the importer
+  // will read. A preview computed from a second parse could disagree with the
+  // import, which is worse than showing no preview at all.
+  const populationRows = useMemo(
+    () => (populationText.trim() ? parseDelimitedText(populationText) : []),
+    [populationText],
+  )
+
+  /**
+   * A mapping the user set by hand, remembered against the headers it was made
+   * for. Pasting a different file drops it: a column index chosen for one
+   * export means nothing in another, and silently carrying it over would point
+   * a field at whatever now sits in that position.
+   */
+  const populationHeaders = useMemo(() => populationRows[0] ?? [], [populationRows])
+  const headerSignature = populationHeaders.join('|')
+  const mapping: ColumnMapping = useMemo(
+    () => mappings[headerSignature] ?? proposeMapping(populationHeaders),
+    [mappings, headerSignature, populationHeaders],
+  )
+
   const populationImport = useMemo(
     () =>
       populationText.trim()
         ? importEmployeesFromCsv(populationText, {
             knownGradeIds: grades.length > 0 ? grades.map((g) => g.id) : undefined,
+            mapping,
           })
         : null,
-    [populationText, grades],
+    [populationText, grades, mapping],
   )
 
   const employees = populationImport?.employees ?? loaded?.employees ?? []
@@ -519,6 +635,23 @@ export default function App() {
             />
           </Panel>
 
+          {restored ? (
+            <div className="mb-3 flex items-baseline justify-between gap-3 rounded border border-zinc-200 bg-white px-2.5 py-1.5 text-[11px] text-zinc-500">
+              <span>
+                Picked up your last matrix design. Your population was not kept —
+                paste it again.
+              </span>
+              <button
+                type="button"
+                onClick={() => setRestored(false)}
+                className="shrink-0 text-zinc-400 hover:text-zinc-700"
+                aria-label="Dismiss"
+              >
+                ×
+              </button>
+            </div>
+          ) : null}
+
           <Panel title="Merit matrix">
             <MeritMatrixGrid
               matrix={matrix}
@@ -685,11 +818,24 @@ export default function App() {
               placeholder={POPULATION_PLACEHOLDER}
               rows={5}
             />
-            <p className="mt-2 text-[11px] leading-relaxed text-zinc-400">
-              CSV or a column range copied from a spreadsheet. Needs an id, grade,
-              base salary and rating; FTE, eligibility and hire date are optional.
-              Any other column becomes a grouping you can break results down by.
-            </p>
+            {populationRows.length > 0 ? (
+              <div className="mt-2.5">
+                <ColumnMapper
+                  rows={populationRows}
+                  mapping={mapping}
+                  onChange={(next) =>
+                    setMappings((current) => ({ ...current, [headerSignature]: next }))
+                  }
+                />
+              </div>
+            ) : (
+              <p className="mt-2 text-[11px] leading-relaxed text-zinc-400">
+                CSV or a column range copied from a spreadsheet. Needs an id, grade,
+                base salary and rating; FTE, eligibility and hire date are optional.
+                Any other column becomes a grouping you can break results down by.
+                Nothing needs renaming first — you can tell it which column is which.
+              </p>
+            )}
           </CollapsiblePanel>
 
           <CollapsiblePanel
@@ -764,8 +910,21 @@ export default function App() {
       */}
       <footer className="mx-auto max-w-[100rem] border-t border-zinc-200 px-6 py-4">
         <p className="text-[11px] leading-relaxed text-zinc-400">
-          Merit Lab runs entirely in your browser. No server, no account, no
-          storage — close the tab and it is gone.{' '}
+          Merit Lab runs entirely in your browser. No server and no account.{' '}
+          <span className="text-zinc-500">
+            Your population is never written anywhere
+          </span>
+          : close the tab and the people are gone. Your matrix design — the
+          percentages, bands and settings, which contain nobody's pay — is kept on
+          this device so a refresh does not cost you the work.{' '}
+          <button
+            type="button"
+            onClick={forgetDesign}
+            className="underline decoration-zinc-300 underline-offset-2 hover:text-zinc-700"
+          >
+            Forget it
+          </button>
+          .{' '}
           <a
             href="https://github.com/CompForYou/merit-lab"
             target="_blank"

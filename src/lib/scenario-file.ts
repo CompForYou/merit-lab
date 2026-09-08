@@ -211,7 +211,8 @@ function readEmployees(value: unknown, errors: string[]): Employee[] | null {
   return employees
 }
 
-function readMatrix(value: unknown, errors: string[]): MeritMatrix | null {
+/** Exported so session memory validates a stored matrix with this same reader. */
+export function readMatrix(value: unknown, errors: string[]): MeritMatrix | null {
   if (!isRecord(value)) {
     errors.push('The merit matrix is missing.')
     return null
@@ -262,7 +263,8 @@ function readMatrix(value: unknown, errors: string[]): MeritMatrix | null {
 
 const OVER_MAX_MODES: OverMaxMode[] = ['capAtMax', 'allowOverMax', 'lumpSum']
 
-function readSettings(
+/** Exported so session memory validates stored settings with this same reader. */
+export function readSettings(
   value: unknown,
   errors: string[],
   warnings: string[],

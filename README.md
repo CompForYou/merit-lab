@@ -34,11 +34,38 @@ Nobody in compensation is permitted to upload pay data to a stranger's website. 
 app never receives it.
 
 There is no server, no account, no database and no analytics. Everything happens in the
-browser tab. Close it and the data is gone. If you want to keep a scenario, you export a
-file to your own disk.
+browser tab. If you want to keep a scenario, you export a file to your own disk.
 
 That constraint is not a feature bolted on for reassurance — it is the reason a comp team
 can adopt the tool without asking anyone's permission.
+
+**What is kept, precisely.** Your population is never written anywhere: not to disk, not
+to storage, not to a log. Close the tab and the people are gone. Your *plan design* — the
+matrix percentages, band boundaries, rating labels, target budget and settings, none of
+which contain anybody's pay — is kept in browser storage on your own device, so that an
+accidental refresh does not cost you an afternoon's work. Nothing is written at all until
+you change something, and one click in the footer erases it.
+
+That split is the whole design: the population is cheap to restore and expensive to
+store, and the matrix is the opposite.
+
+## Getting your file in
+
+An HRIS extract does not have a column called "base salary". It has `Curr_Ann_Base_Amt`
+next to `Prev_Ann_Base_Amt`, and a `Level` column that means job family rather than grade.
+
+Merit Lab matches what it recognises and then shows you the mapping, with three real rows
+of your own data underneath each field so you can see what it will read — including the
+interpretations that are not guessable, like an FTE of `50` meaning half time and
+`03/04/2024` being read day-first. Anything it could not match, you point at the right
+column yourself. Nothing needs renaming first.
+
+It also checks the data underneath the mapping and says so when the two disagree: a
+salary column holding four repeating words, an employee id that repeats, an eligibility
+column with five values. A column matched by name alone — `Pay`, `Level`, `Band` — is
+flagged for confirmation rather than accepted quietly, because a wrong column still
+produces a budget, a distribution and a recommendation, all of them wrong and none of them
+obviously so.
 
 ## The maths
 
@@ -60,8 +87,10 @@ unit test with a hand-calculated expected value.
 | `compression.ts` | Adjacent-grade differentials |
 | `insights.ts` | Increase distribution, cost drivers, cost per point of movement |
 | `advisor.ts` | Ranked findings, each with its arithmetic and its cost |
+| `column-mapping.ts` | Which column is which, and whether the data underneath agrees |
+| `session-memory.ts` | What is kept between visits, and the guard that keeps pay out of it |
 
-**558 tests.** The deployment runs them before publishing, so a broken formula cannot
+**615 tests.** The deployment runs them before publishing, so a broken formula cannot
 reach the live URL.
 
 If you want to check whether this tool knows what it is doing, read

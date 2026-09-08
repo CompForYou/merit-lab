@@ -1,5 +1,13 @@
 import type { Employee } from '../types/domain'
-import { parseDelimitedText, normalizeHeader } from './csv'
+import { parseDelimitedText } from './csv'
+import { parseCurrency, parseFte, parseBoolean, normalizeDate } from './parse-values'
+import {
+  proposeMapping,
+  attributeColumns as unclaimedColumns,
+  EMPLOYEE_FIELDS,
+  type ColumnMapping,
+  type EmployeeField,
+} from './column-mapping'
 
 /**
  * One problem with an imported file.
@@ -22,6 +30,8 @@ export interface EmployeeImportResult {
   warnings: ImportIssue[]
   /** Headers that were not recognised and became grouping attributes. */
   attributeColumns: string[]
+  /** The mapping actually used, whether proposed or supplied. */
+  mapping: ColumnMapping
 }
 
 export interface EmployeeImportOptions {
@@ -29,41 +39,13 @@ export interface EmployeeImportOptions {
   knownGradeIds?: string[]
   /** Ratings from the loaded scale. A row referencing anything else errors. */
   knownRatings?: string[]
-}
-
-/**
- * Accepted header spellings for each known field.
- *
- * Compared after normalisation, so "Employee ID", "employee_id" and "EmployeeId"
- * all match the same entry. The aim is that a file exported from an HRIS imports
- * without anyone renaming a column by hand.
- */
-const FIELD_ALIASES: Record<string, string[]> = {
-  id: [
-    'id', 'employeeid', 'empid', 'employeenumber', 'employeeno',
-    'workerid', 'personid', 'personnelnumber', 'associateid',
-  ],
-  gradeId: [
-    'grade', 'gradeid', 'gradecode', 'paygrade', 'salarygrade',
-    'level', 'joblevel', 'band', 'payband', 'salaryband',
-  ],
-  baseSalary: [
-    'basesalary', 'salary', 'annualsalary', 'basepay', 'base',
-    'annualbasesalary', 'currentsalary', 'annualrate', 'baserate', 'pay',
-  ],
-  performanceRating: [
-    'performancerating', 'rating', 'performance', 'perfrating',
-    'reviewrating', 'performancescore', 'appraisalrating', 'performanceresult',
-  ],
-  fte: ['fte', 'fulltimeequivalent', 'ftepercent', 'ftevalue', 'workingtime'],
-  eligible: [
-    'eligible', 'meriteligible', 'eligibility', 'iseligible',
-    'eligibleformerit', 'meriteligibility',
-  ],
-  hireDate: [
-    'hiredate', 'startdate', 'dateofhire', 'originalhiredate',
-    'seniyoritydate', 'senioritydate', 'employmentstartdate', 'datehired',
-  ],
+  /**
+   * Which column serves which field.
+   *
+   * Absent, the headers are matched automatically. Supplied, it is obeyed
+   * exactly: the user has looked at their own file and this module has not.
+   */
+  mapping?: ColumnMapping
 }
 
 /** Below this median salary the file is probably hourly or monthly, not annual. */
@@ -95,14 +77,16 @@ export function importEmployeesFromCsv(
       errors: [{ row: null, column: null, message: 'The pasted text is empty.' }],
       warnings,
       attributeColumns: [],
+      mapping: proposeMapping([]),
     }
   }
 
   const headers = rows[0]
-  const { fieldColumns, attributeColumns } = mapHeaders(headers)
+  const mapping = options.mapping ?? proposeMapping(headers)
+  const attributes = unclaimedColumns(mapping, headers)
 
-  const required = ['id', 'gradeId', 'baseSalary', 'performanceRating'] as const
-  const missing = required.filter((f) => fieldColumns[f] === undefined)
+  const required = EMPLOYEE_FIELDS.filter((f) => f.required)
+  const missing = required.filter((f) => mapping.columns[f.field] === null)
   if (missing.length > 0) {
     return {
       employees,
@@ -111,16 +95,17 @@ export function importEmployeesFromCsv(
           row: 1,
           column: null,
           message: `No column found for ${missing
-            .map(describeField)
+            .map((f) => f.label.toLowerCase())
             .join(', ')}. Found: ${headers.join(', ')}.`,
         },
       ],
       warnings,
       attributeColumns: [],
+      mapping,
     }
   }
 
-  if (fieldColumns.eligible === undefined) {
+  if (mapping.columns.eligible === null) {
     warnings.push({
       row: 1,
       column: null,
@@ -133,9 +118,9 @@ export function importEmployeesFromCsv(
   for (let i = 1; i < rows.length; i++) {
     const cells = rows[i]
     const lineNumber = i + 1
-    const cell = (field: string): string => {
-      const index = fieldColumns[field]
-      return index === undefined ? '' : (cells[index] ?? '').trim()
+    const cell = (field: EmployeeField): string => {
+      const index = mapping.columns[field]
+      return index === null ? '' : (cells[index] ?? '').trim()
     }
 
     const id = cell('id')
@@ -212,7 +197,7 @@ export function importEmployeesFromCsv(
     }
 
     const eligible =
-      fieldColumns.eligible === undefined ? true : parseBoolean(cell('eligible'))
+      mapping.columns.eligible === null ? true : parseBoolean(cell('eligible'))
     if (eligible === null) {
       errors.push({
         row: lineNumber,
@@ -232,10 +217,10 @@ export function importEmployeesFromCsv(
       })
     }
 
-    const attributes: Record<string, string> = {}
-    for (const { header, index } of attributeColumns) {
+    const rowAttributes: Record<string, string> = {}
+    for (const { header, index } of attributes) {
       const value = (cells[index] ?? '').trim()
-      if (value !== '') attributes[header] = value
+      if (value !== '') rowAttributes[header] = value
     }
 
     seenIds.add(id)
@@ -247,7 +232,7 @@ export function importEmployeesFromCsv(
       fte: fteResult.value,
       eligible,
       hireDate,
-      attributes: Object.keys(attributes).length > 0 ? attributes : undefined,
+      attributes: Object.keys(rowAttributes).length > 0 ? rowAttributes : undefined,
     })
   }
 
@@ -258,110 +243,9 @@ export function importEmployeesFromCsv(
     employees,
     errors,
     warnings,
-    attributeColumns: attributeColumns.map((c) => c.header),
+    attributeColumns: attributes.map((c) => c.header),
+    mapping,
   }
-}
-
-function mapHeaders(headers: string[]) {
-  const fieldColumns: Record<string, number> = {}
-  const attributeColumns: { header: string; index: number }[] = []
-
-  headers.forEach((header, index) => {
-    const normalized = normalizeHeader(header)
-    if (normalized === '') return
-
-    const field = Object.keys(FIELD_ALIASES).find(
-      (f) => FIELD_ALIASES[f].includes(normalized) && fieldColumns[f] === undefined,
-    )
-
-    if (field) fieldColumns[field] = index
-    else attributeColumns.push({ header: header.trim(), index })
-  })
-
-  return { fieldColumns, attributeColumns }
-}
-
-function describeField(field: string): string {
-  const labels: Record<string, string> = {
-    id: 'employee id',
-    gradeId: 'grade',
-    baseSalary: 'base salary',
-    performanceRating: 'performance rating',
-  }
-  return labels[field] ?? field
-}
-
-/** "$95,000.50", "95 000", "(1,000)" as negative. Returns null if unreadable. */
-function parseCurrency(raw: string): number | null {
-  if (raw === '') return null
-  const negative = /^\(.*\)$/.test(raw.trim())
-  const cleaned = raw.replace(/[()$£€¥,\s]/g, '').replace(/[A-Za-z]/g, '')
-  if (cleaned === '' || !/^-?\d*\.?\d+$/.test(cleaned)) return null
-  const value = Number(cleaned)
-  if (!Number.isFinite(value)) return null
-  return negative ? -value : value
-}
-
-/**
- * FTE arrives as a decimal (0.5) or a percentage (50), depending on the system.
- * Anything above 1 is read as a percentage, which is the only interpretation
- * that makes sense: nobody works 50 times full time.
- */
-function parseFte(raw: string): { value: number; error?: string; warning?: string } {
-  if (raw === '') return { value: 1 }
-
-  const cleaned = raw.replace(/[%\s]/g, '')
-  const value = Number(cleaned)
-  if (cleaned === '' || !Number.isFinite(value)) {
-    return { value: 1, error: `FTE "${raw}" is not a number.` }
-  }
-  if (value <= 0) return { value: 1, error: 'FTE must be greater than zero.' }
-
-  if (value > 1) {
-    if (value > 100) return { value: 1, error: `FTE "${raw}" is above 100%.` }
-    return {
-      value: value / 100,
-      warning: `FTE "${raw}" read as ${value}%, that is ${value / 100} FTE.`,
-    }
-  }
-  return { value }
-}
-
-function parseBoolean(raw: string): boolean | null {
-  const value = raw.trim().toLowerCase()
-  if (value === '') return true
-  if (['y', 'yes', 'true', 't', '1', 'eligible'].includes(value)) return true
-  if (['n', 'no', 'false', 'f', '0', 'ineligible', 'not eligible'].includes(value)) {
-    return false
-  }
-  return null
-}
-
-/** Accepts yyyy-mm-dd, dd/mm/yyyy and mm/dd/yyyy. Returns yyyy-mm-dd. */
-function normalizeDate(raw: string): string | undefined {
-  const value = raw.trim()
-
-  const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(value)
-  if (iso) return buildDate(+iso[1], +iso[2], +iso[3])
-
-  const slashed = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/.exec(value)
-  if (slashed) {
-    const first = +slashed[1]
-    const second = +slashed[2]
-    const year = +slashed[3]
-    // Ambiguous between day-first and month-first. Whichever value cannot be a
-    // month decides it; if both could be, day-first is assumed.
-    if (first > 12) return buildDate(year, second, first)
-    if (second > 12) return buildDate(year, first, second)
-    return buildDate(year, second, first)
-  }
-
-  return undefined
-}
-
-function buildDate(year: number, month: number, day: number): string | undefined {
-  if (month < 1 || month > 12 || day < 1 || day > 31) return undefined
-  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
 }
 
 /**
